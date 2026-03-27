@@ -1,0 +1,14 @@
+{
+  "accepted_pos": [
+    "9999",
+    "99999"
+  ],
+  "last_invoice_number": 2075,
+  "email": "krochikbrian@gmail.com",
+  "smtp": {
+    "server": "smtp.gmail.com",
+    "port": 587,
+    "user": "zerointerllc@gmail.com",
+    "password": "cdsm ljst imul abrr"
+  }
+}

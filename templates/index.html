@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Envíos</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Envíos">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <meta name="theme-color" content="#11111b">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%234c6ef5'/><stop offset='1' stop-color='%2389b4fa'/></linearGradient></defs><rect width='32' height='32' rx='7' fill='url(%23g)'/><path d='M9 6h10l4 4v14a2 2 0 01-2 2H9a2 2 0 01-2-2V8a2 2 0 012-2z' fill='white' opacity='.92'/><path d='M19 6v4h4' fill='none' stroke='%234c6ef5' stroke-width='1.2'/><rect x='10' y='12' width='10' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><rect x='10' y='15.5' width='7' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><rect x='10' y='19' width='8.5' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><circle cx='22' cy='22' r='7' fill='%23fab387'/><path d='M22 18.5v7M18.5 22h7' stroke='white' stroke-width='2' stroke-linecap='round'/></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { 800: '#1e1e2e', 900: '#11111b', 700: '#313244', 600: '#45475a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background: #11111b; color: #cdd6f4; }
+        .card { background: #1e1e2e; border: 1px solid #313244; border-radius: 0.75rem; transition: all 0.2s ease; }
+        .card-hover:hover { border-color: #89b4fa; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .btn-primary { background: #89b4fa; color: #1e1e2e; font-weight: 600; }
+        .btn-primary:hover { background: #74c7ec; }
+        .btn-danger { background: #f38ba8; color: #1e1e2e; }
+        .btn-danger:hover { background: #eba0ac; }
+        .btn-success { background: #a6e3a1; color: #1e1e2e; }
+        .btn-success:hover { background: #94e2d5; }
+        .sortable-ghost { opacity: 0.4; }
+        .sortable-chosen { transform: scale(1.02); }
+        .used-item { border-color: rgba(75, 85, 99, 0.3); background: rgba(31, 41, 55, 0.5); opacity: 0.5; }
+        .used-item .item-title { }
+        .used-item .item-data { }
+        .used-item select { opacity: 1; position: relative; z-index: 1; }
+        .badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 9999px; }
+        .tab-active { border-bottom: 2px solid #89b4fa; color: #89b4fa; background: rgba(137, 180, 250, 0.1); border-radius: 0.5rem 0.5rem 0 0; }
+        .drop-zone { border: 2px dashed #45475a; min-height: 200px; transition: all 0.2s; }
+        .drop-zone.drag-over { border-color: #89b4fa; background: #89b4fa11; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #11111b; }
+        ::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+        .upload-area { border: 2px dashed #45475a; transition: all 0.3s; cursor: pointer; }
+        .upload-area:hover, .upload-area.drag-over { border-color: #89b4fa; background: #89b4fa11; }
+        .toast { animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s; }
+        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes fadeOut { to { opacity: 0; } }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Toast container -->
+    <div id="toasts" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Delete confirmation modal -->
+    <div id="delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(0,0,0,0.6);">
+        <div class="card p-6 max-w-md mx-auto">
+            <h3 class="text-lg font-semibold mb-2">¿Eliminar ítem?</h3>
+            <p id="delete-modal-text" class="text-sm text-gray-400 mb-4"></p>
+            <div class="flex gap-3 justify-end">
+                <button onclick="closeDeleteModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
+                <button id="delete-confirm-btn" class="btn-danger px-4 py-2 rounded-lg text-sm">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="border-b border-gray-700/50 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="4" y="2" width="24" height="32" rx="3" fill="#313244" stroke="#89b4fa" stroke-width="1.5"/>
+                    <rect x="8" y="10" width="16" height="2" rx="1" fill="#585b70"/>
+                    <rect x="8" y="15" width="12" height="2" rx="1" fill="#585b70"/>
+                    <rect x="8" y="20" width="14" height="2" rx="1" fill="#585b70"/>
+                    <rect x="8" y="25" width="10" height="2" rx="1" fill="#585b70"/>
+                    <circle cx="28" cy="28" r="11" fill="#1e1e2e" stroke="#f9e2af" stroke-width="1.5"/>
+                    <path d="M28 20v10l3-3" stroke="#f9e2af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M25 27l3 3" stroke="#f9e2af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h1 class="text-2xl font-bold">
+                    <span class="text-yellow-300">⚡</span> Gestión de Envíos
+                    <span class="text-sm font-normal text-gray-500 ml-2">Zero International</span>
+                </h1>
+            </div>
+            <div class="flex gap-1">
+                <button onclick="showTab('upload')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="upload">📤 Subir CSV</button>
+                <button onclick="showTab('items')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="items">📦 Ítems</button>
+                <button onclick="showTab('history')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="history">📋 Historial</button>
+                <button onclick="showTab('config')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="config">⚙️ Configuración</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-6">
+        <!-- Upload Tab -->
+        <section id="tab-upload" class="tab-content">
+            <div class="card p-8 max-w-2xl mx-auto">
+                <h2 class="text-xl font-semibold mb-4">Subir CSV de Amazon Business</h2>
+                <p class="text-gray-400 text-sm mb-6">Subí tu reporte de órdenes de Amazon Business. Solo se importarán ítems con estado de entrega "Entregado".</p>
+                <div id="upload-area" class="upload-area rounded-xl p-12 text-center"
+                     ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="handleDrop(event)">
+                    <div class="text-4xl mb-4">📁</div>
+                    <p class="text-lg mb-2">Arrastrá el CSV acá</p>
+                    <p class="text-gray-500 text-sm mb-4">o hacé click para buscar</p>
+                    <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="uploadFile(this.files[0])">
+                    <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg">Elegir Archivo</button>
+                </div>
+                <div id="upload-status" class="mt-4 hidden">
+                    <div class="flex items-center gap-2">
+                        <div class="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                        <span>Procesando...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Items Tab -->
+        <section id="tab-items" class="tab-content hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Available Items -->
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h2 class="text-xl font-semibold">📦 Ítems Disponibles</h2>
+                            <div id="status-counter" class="flex gap-3 text-xs text-gray-500 mt-1"></div>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <input type="text" id="search-items" placeholder="Buscar..." 
+                                   class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400"
+                                   oninput="filterItems()">
+                            <select id="filter-status" class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none" onchange="filterItems()">
+                                <option value="all">Todos</option>
+                                <option value="pending" selected>Pendiente</option>
+                                <option value="invoiced">Facturado</option>
+                                <option value="sent">Enviado</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="items-list" class="space-y-2 max-h-[70vh] overflow-y-auto pr-2">
+                        <div class="text-center py-12">
+                            <div class="text-5xl mb-3 opacity-50">📦</div>
+                            <p class="text-gray-500">No hay ítems cargados</p>
+                            <p class="text-gray-600 text-sm mt-1">Subí un CSV de Amazon Business para empezar</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invoice Box (Drop Zone) -->
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold">📋 Caja de Invoice</h2>
+                        <button onclick="clearBox()" class="text-sm text-gray-400 hover:text-red-400 transition">Limpiar</button>
+                    </div>
+                    <div class="card p-4">
+                        <div id="invoice-box" class="drop-zone rounded-lg p-4 space-y-2 min-h-[200px]">
+                            <p class="text-gray-500 text-center py-8 empty-msg">Arrastrá ítems acá para armar un invoice</p>
+                        </div>
+                        <div class="mt-3 px-1 flex items-center gap-2 text-sm">
+                            <span class="text-gray-400">Descuento:</span>
+                            <input type="number" id="discount-input" value="0" min="0" max="100" step="0.1"
+                                   class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                                   oninput="renderBox()">
+                            <span class="text-gray-400">%</span>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <div class="flex justify-between items-center text-lg font-semibold">
+                                <span>Total:</span>
+                                <span id="box-total" class="text-green-400">$0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center text-sm text-gray-400 mt-1">
+                                <span id="box-count">0 ítems</span>
+                                <span id="next-invoice">Próximo: #<span id="next-inv-num">—</span></span>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-3 mt-4">
+                                <button onclick="generateInvoice()" id="generate-btn"
+                                        class="btn-primary flex-1 py-3 rounded-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled>
+                                    ⚡ Generar Invoice
+                                </button>
+                                <button onclick="generateRemito()" id="remito-btn"
+                                        class="flex-1 py-3 rounded-lg text-lg disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                                        style="background: #fab387; color: #1e1e2e;"
+                                        onmouseover="this.style.background='#f9e2af'"
+                                        onmouseout="this.style.background='#fab387'"
+                                        disabled>
+                                    📄 Generar Especial
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- History Tab -->
+        <section id="tab-history" class="tab-content hidden">
+            <h2 class="text-xl font-semibold mb-4">📋 Historial de Invoices</h2>
+            <div id="history-list" class="space-y-3">
+                <p class="text-gray-500 text-center py-8">No hay invoices generados aún.</p>
+            </div>
+        </section>
+
+        <!-- Config Tab -->
+        <section id="tab-config" class="tab-content hidden">
+            <h2 class="text-xl font-semibold mb-4">⚙️ Configuración</h2>
+            <div class="max-w-lg space-y-6">
+                <!-- PO Numbers -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">Números de PO aceptados</h3>
+                    <p class="text-xs text-gray-500 mb-3">Solo se importarán ítems del CSV que coincidan con estos PO.</p>
+                    <div id="po-list" class="flex flex-wrap gap-2 mb-3"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-po" placeholder="Nuevo PO..." 
+                               class="flex-1 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                               onkeydown="if(event.key==='Enter')addPO()">
+                        <button onclick="addPO()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">+ Agregar</button>
+                    </div>
+                </div>
+
+                <!-- Invoice Counter -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">Contador de Invoice</h3>
+                    <p class="text-xs text-gray-500 mb-3">El próximo invoice generado usará el número siguiente a este valor.</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="number" id="invoice-counter" min="1" 
+                               class="w-32 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-400"
+                               onkeydown="if(event.key==='Enter')saveInvoiceCounter()">
+                        <button onclick="saveInvoiceCounter()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
+                        <span id="counter-status" class="text-xs text-gray-500"></span>
+                    </div>
+                </div>
+
+                <!-- Email de envío -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">📧 Email de envío</h3>
+                    <p class="text-xs text-gray-500 mb-3">Los invoices/especiales generados se enviarán automáticamente a este email.</p>
+                    <div class="flex gap-2 items-center">
+                        <input type="email" id="email-config" placeholder="usuario@ejemplo.com"
+                               class="flex-1 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                               onkeydown="if(event.key==='Enter')saveEmailConfig()">
+                        <button onclick="saveEmailConfig()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
+                    </div>
+                    <span id="email-config-status" class="text-xs text-gray-500 mt-1 block"></span>
+                </div>
+
+                <!-- SMTP Avanzado -->
+                <div class="card p-5">
+                    <button onclick="toggleSmtp()" class="w-full text-left flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-gray-300">📧 Configuración SMTP (Avanzado)</h3>
+                        <span id="smtp-toggle-icon" class="text-gray-400 text-xs">▼ Expandir</span>
+                    </button>
+                    <div id="smtp-section" class="hidden mt-3 space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">SMTP Server</label>
+                                <input type="text" id="smtp-server" value="smtp.gmail.com"
+                                       class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">Puerto</label>
+                                <input type="number" id="smtp-port" value="587"
+                                       class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">Usuario</label>
+                            <input type="email" id="smtp-user" placeholder="tu@gmail.com"
+                                   class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">Contraseña (App Password)</label>
+                            <input type="password" id="smtp-password" placeholder="App password de Gmail"
+                                   class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                            <span id="smtp-password-status" class="text-xs text-gray-500 mt-1 block"></span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="saveSmtpConfig()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar SMTP</button>
+                            <span id="smtp-save-status" class="text-xs text-gray-500"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+    // ─── State ──────────────────────────────────────────────────────────
+    let allItems = [];
+    let boxItems = new Map(); // id -> {item, qty}
+    let boxSortable = null;
+
+    // ─── PO Config ──────────────────────────────────────────────────────
+    const DEFAULT_POS = ['9999', '99999'];
+    function getAcceptedPOs() {
+        const stored = localStorage.getItem('acceptedPOs');
+        return stored ? JSON.parse(stored) : [...DEFAULT_POS];
+    }
+    function saveAcceptedPOs(pos) {
+        localStorage.setItem('acceptedPOs', JSON.stringify(pos));
+        // Sync to backend
+        fetch('/api/config/po', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({pos}) });
+    }
+    function renderPOs() {
+        const list = document.getElementById('po-list');
+        if (!list) return;
+        const pos = getAcceptedPOs();
+        list.innerHTML = pos.map(po => `
+            <span class="inline-flex items-center gap-1.5 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full px-3 py-1 text-sm font-mono">
+                ${po}
+                <button onclick="removePO('${po}')" class="text-blue-400/60 hover:text-red-400 transition-colors ml-0.5">&times;</button>
+            </span>
+        `).join('');
+    }
+    function addPO() {
+        const input = document.getElementById('new-po');
+        const val = input.value.trim();
+        if (!val) return;
+        const pos = getAcceptedPOs();
+        if (pos.includes(val)) { toast('Ese PO ya existe', 'error'); return; }
+        pos.push(val);
+        saveAcceptedPOs(pos);
+        renderPOs();
+        input.value = '';
+        toast(`PO "${val}" agregado`, 'success');
+    }
+    function removePO(po) {
+        let pos = getAcceptedPOs().filter(p => p !== po);
+        if (pos.length === 0) { toast('Debe haber al menos un PO', 'error'); return; }
+        saveAcceptedPOs(pos);
+        renderPOs();
+        toast(`PO "${po}" eliminado`, 'success');
+    }
+
+    // ─── Invoice Counter ────────────────────────────────────────────────
+    async function loadInvoiceCounter() {
+        try {
+            const res = await fetch('/api/config/invoice-counter');
+            const data = await res.json();
+            document.getElementById('invoice-counter').value = data.last_number;
+            document.getElementById('counter-status').textContent = `Próximo: #${data.last_number + 1}`;
+        } catch(e) {}
+    }
+    async function saveInvoiceCounter() {
+        const val = parseInt(document.getElementById('invoice-counter').value);
+        if (!val || val < 1) { toast('Número inválido', 'error'); return; }
+        try {
+            const res = await fetch('/api/config/invoice-counter', {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({last_number: val})
+            });
+            if (res.ok) {
+                document.getElementById('counter-status').textContent = `Próximo: #${val + 1}`;
+                toast(`Contador actualizado. Próximo invoice: #${val + 1}`, 'success');
+            }
+        } catch(e) { toast('Error al guardar', 'error'); }
+    }
+
+    // ─── Email Config ───────────────────────────────────────────────────
+    async function loadEmailConfig() {
+        try {
+            const res = await fetch('/api/config/email');
+            const data = await res.json();
+            const input = document.getElementById('email-config');
+            const status = document.getElementById('email-config-status');
+            if (data.email) {
+                input.value = data.email;
+                status.textContent = `Email configurado: ${data.email}`;
+            } else {
+                input.value = '';
+                status.textContent = 'No configurado — no se enviarán emails automáticamente.';
+            }
+        } catch(e) {}
+    }
+
+    async function saveEmailConfig() {
+        const email = document.getElementById('email-config').value.trim();
+        try {
+            const res = await fetch('/api/config/email', {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({email: email || null})
+            });
+            const data = await res.json();
+            const status = document.getElementById('email-config-status');
+            if (res.ok) {
+                status.textContent = email ? `Email guardado: ${email}` : 'Email de envío eliminado.';
+                toast(email ? `Email guardado: ${email}` : 'Email de envío eliminado', 'success');
+            } else {
+                toast(data.error || 'Error al guardar email', 'error');
+            }
+        } catch(e) { toast('Error: ' + e.message, 'error'); }
+    }
+
+    async function loadSmtpConfig() {
+        try {
+            const res = await fetch('/api/config/smtp');
+            const data = await res.json();
+            if (data.server) document.getElementById('smtp-server').value = data.server;
+            if (data.port) document.getElementById('smtp-port').value = data.port;
+            if (data.user) document.getElementById('smtp-user').value = data.user;
+            const pwdStatus = document.getElementById('smtp-password-status');
+            if (data.password_set) {
+                pwdStatus.textContent = 'Contraseña: Configurado ✓';
+                document.getElementById('smtp-password').placeholder = '••••••  (dejar vacío para no cambiar)';
+            } else {
+                pwdStatus.textContent = '';
+                document.getElementById('smtp-password').placeholder = 'App password de Gmail';
+            }
+        } catch(e) {}
+    }
+
+    async function saveSmtpConfig() {
+        const server = document.getElementById('smtp-server').value.trim();
+        const port = parseInt(document.getElementById('smtp-port').value);
+        const user = document.getElementById('smtp-user').value.trim();
+        const password = document.getElementById('smtp-password').value;
+        try {
+            const body = {server, port, user};
+            if (password) body.password = password;
+            const res = await fetch('/api/config/smtp', {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast('Configuración SMTP guardada', 'success');
+                document.getElementById('smtp-save-status').textContent = 'Guardado ✓';
+                document.getElementById('smtp-password').value = '';
+                document.getElementById('smtp-password-status').textContent = 'Contraseña: Configurado ✓';
+                document.getElementById('smtp-password').placeholder = '••••••  (dejar vacío para no cambiar)';
+            } else {
+                toast(data.error || 'Error al guardar SMTP', 'error');
+            }
+        } catch(e) { toast('Error: ' + e.message, 'error'); }
+    }
+
+    function toggleSmtp() {
+        const section = document.getElementById('smtp-section');
+        const icon = document.getElementById('smtp-toggle-icon');
+        if (section.classList.contains('hidden')) {
+            section.classList.remove('hidden');
+            icon.textContent = '▲ Colapsar';
+        } else {
+            section.classList.add('hidden');
+            icon.textContent = '▼ Expandir';
+        }
+    }
+
+    // ─── Tabs ───────────────────────────────────────────────────────────
+    function showTab(name) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`tab-${name}`).classList.remove('hidden');
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('tab-active', btn.dataset.tab === name);
+        });
+        if (name === 'items') loadItems();
+        if (name === 'history') loadHistory();
+        if (name === 'config') { renderPOs(); loadInvoiceCounter(); loadEmailConfig(); loadSmtpConfig(); }
+        localStorage.setItem('lastTab', name);
+    }
+
+    // ─── Toast ──────────────────────────────────────────────────────────
+    function toast(msg, type = 'info') {
+        const colors = { info: 'bg-blue-500', success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500' };
+        const div = document.createElement('div');
+        div.className = `toast ${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
+        div.textContent = msg;
+        document.getElementById('toasts').appendChild(div);
+        setTimeout(() => div.remove(), 3000);
+    }
+
+    // ─── Upload ─────────────────────────────────────────────────────────
+    function handleDrop(e) {
+        e.preventDefault();
+        e.target.closest('.upload-area')?.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadFile(file);
+    }
+
+    async function uploadFile(file) {
+        if (!file) return;
+        const status = document.getElementById('upload-status');
+        status.classList.remove('hidden');
+
+        const form = new FormData();
+        form.append('file', file);
+
+        try {
+            const res = await fetch('/api/upload', { method: 'POST', body: form });
+            const data = await res.json();
+            if (res.ok) {
+                toast(`${data.message}`, 'success');
+                showTab('items');
+            } else {
+                toast(data.error || 'Error al subir', 'error');
+            }
+        } catch (err) {
+            toast('Error de subida: ' + err.message, 'error');
+        } finally {
+            status.classList.add('hidden');
+        }
+    }
+
+    // ─── Items ──────────────────────────────────────────────────────────
+    async function loadItems() {
+        try {
+            const res = await fetch('/api/items');
+            allItems = await res.json();
+            renderItems();
+            updateNextInvoice();
+        } catch (err) {
+            toast('Error al cargar ítems', 'error');
+        }
+    }
+
+    function filterItems() {
+        renderItems();
+    }
+
+    function renderItems() {
+        const search = document.getElementById('search-items').value.toLowerCase();
+        const statusFilter = document.getElementById('filter-status').value;
+        const list = document.getElementById('items-list');
+
+        // Status counter
+        const pendingCount = allItems.filter(i => i.status === 'pending').length;
+        const invoicedCount = allItems.filter(i => i.status === 'invoiced').length;
+        const sentCount = allItems.filter(i => i.status === 'sent').length;
+        const counterEl = document.getElementById('status-counter');
+        if (counterEl) {
+            counterEl.innerHTML = `<span>🔵 ${pendingCount} pendientes</span><span>🟡 ${invoicedCount} facturados</span><span>🟢 ${sentCount} enviados</span>`;
+        }
+
+        const filtered = allItems.filter(item => {
+            if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+            if (search && !item.title.toLowerCase().includes(search) && 
+                !item.order_id.toLowerCase().includes(search) &&
+                !(item.asin && item.asin.toLowerCase().includes(search))) return false;
+            return true;
+        });
+
+        if (filtered.length === 0) {
+            list.innerHTML = `<div class="text-center py-12">
+                <div class="text-5xl mb-3 opacity-50">📦</div>
+                <p class="text-gray-500">No hay ítems cargados</p>
+                <p class="text-gray-600 text-sm mt-1">Subí un CSV de Amazon Business para empezar</p>
+            </div>`;
+            return;
+        }
+
+        list.innerHTML = filtered.map(item => {
+            const isUsed = item.status !== 'pending';
+            const inBox = boxItems.has(item.id);
+            const total = (item.price * item.qty).toFixed(2);
+            const trackingDisplay = item.tracking || item.order_id || '—';
+            return `
+                <div class="card card-hover p-4 ${isUsed ? 'used-item' : ''} ${inBox ? 'border-blue-400/50' : ''}" 
+                     data-id="${item.id}" ${!isUsed && !inBox ? 'draggable="true"' : ''}>
+                    <!-- Row 1: Title + Price -->
+                    <div class="flex justify-between items-start gap-3">
+                        <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title" title="${escHtml(item.title)}">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}</p>
+                        <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">$${total}</span>
+                    </div>
+                    <!-- Row 2: Metadata grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2.5 text-xs">
+                        <div>
+                            <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Precio</span>
+                            <p class="text-gray-300 font-medium">$${item.price.toFixed(2)} × ${item.qty}</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Tracking</span>
+                            <p class="text-gray-300 font-mono truncate cursor-pointer hover:text-blue-400 transition-colors" title="Click para copiar: ${escHtml(trackingDisplay)}" onclick="copyTracking('${escHtml(trackingDisplay)}')">${escHtml(trackingDisplay.substring(0, 20))} 📋</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Fecha</span>
+                            <p class="text-gray-300">${item.order_date || '—'}</p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">ASIN</span>
+                            <p class="text-blue-400 font-mono">${item.asin || '—'}</p>
+                        </div>
+                    </div>
+                    <!-- Row 3: Actions -->
+                    <div class="flex items-center justify-between mt-3 pt-2.5" style="border-top: 1px solid rgba(255,255,255,0.06);">
+                        <div class="flex items-center gap-2">
+                            <select onchange="changeItemStatus(${item.id}, this.value)" 
+                                    class="text-xs bg-gray-700/80 border border-gray-600 rounded-md px-2 py-1 focus:outline-none focus:border-blue-400 cursor-pointer">
+                                <option value="pending" ${item.status === 'pending' ? 'selected' : ''}>⏳ Pendiente</option>
+                                <option value="invoiced" ${item.status === 'invoiced' ? 'selected' : ''}>📄 Facturado${item.invoice_number ? ' #'+item.invoice_number : ''}</option>
+                                <option value="sent" ${item.status === 'sent' ? 'selected' : ''}>✈️ Enviado</option>
+                            </select>
+                            ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300 text-xs px-2 py-0.5 rounded">Multi</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${!isUsed && !inBox ? `<button onclick="addToBox(${item.id})" class="text-xs btn-primary px-3 py-1.5 rounded-md font-medium">+ Agregar</button>` : ''}
+                            <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g, "\\'")}')" class="text-xs text-red-400/60 hover:text-red-300 hover:bg-red-400/10 rounded p-1.5 transition-colors" title="Eliminar">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Make items draggable
+        list.querySelectorAll('[draggable="true"]').forEach(el => {
+            el.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', el.dataset.id);
+                el.style.opacity = '0.5';
+            });
+            el.addEventListener('dragend', e => { el.style.opacity = '1'; });
+        });
+    }
+
+    // ─── Discount ───────────────────────────────────────────────────────
+    function getDiscount() {
+        const val = parseFloat(document.getElementById('discount-input')?.value) || 0;
+        return Math.max(0, Math.min(100, val));
+    }
+
+    // ─── Invoice Box ────────────────────────────────────────────────────
+    function initDropZone() {
+        const zone = document.getElementById('invoice-box');
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const id = parseInt(e.dataTransfer.getData('text/plain'));
+            if (id) addToBox(id);
+        });
+    }
+
+    function addToBox(itemId) {
+        if (boxItems.has(itemId)) return;
+        const item = allItems.find(i => i.id === itemId);
+        if (!item || item.status !== 'pending') return;
+        boxItems.set(itemId, { item, qty: item.qty });
+        renderBox();
+        renderItems();
+    }
+
+    function removeFromBox(itemId) {
+        boxItems.delete(itemId);
+        renderBox();
+        renderItems();
+    }
+
+    function updateBoxQty(itemId, qty) {
+        const entry = boxItems.get(itemId);
+        if (entry) {
+            entry.qty = Math.max(1, parseInt(qty) || 1);
+            renderBox();
+        }
+    }
+
+    function clearBox() {
+        boxItems.clear();
+        renderBox();
+        renderItems();
+    }
+
+    function renderBox() {
+        const box = document.getElementById('invoice-box');
+        const genBtn = document.getElementById('generate-btn');
+        const remitoBtn = document.getElementById('remito-btn');
+
+        if (boxItems.size === 0) {
+            box.innerHTML = '<p class="text-gray-500 text-center py-8 empty-msg">Arrastrá ítems acá para armar un invoice</p>';
+            document.getElementById('box-total').textContent = '$0.00';
+            document.getElementById('box-count').textContent = '0 ítems';
+            genBtn.disabled = true;
+            remitoBtn.disabled = true;
+            return;
+        }
+
+        const discount = getDiscount();
+        let total = 0;
+        const html = [];
+        for (const [id, { item, qty }] of boxItems) {
+            const discountedPrice = discount > 0 ? Math.round(item.price * (1 - discount / 100) * 10) / 10 : item.price;
+            const amount = discountedPrice * qty;
+            total += amount;
+            const priceDisplay = discount > 0
+                ? `<span class="text-gray-500 line-through text-xs">$${item.price.toFixed(2)}</span> <span class="text-yellow-300">$${discountedPrice.toFixed(1)}</span>`
+                : `$${item.price.toFixed(2)}`;
+            html.push(`
+                <div class="card p-2.5 flex items-center gap-2 hover:border-blue-400/30 transition-all duration-200" data-box-id="${id}">
+                    <span class="drag-handle cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 px-1">⠿</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs truncate">${escHtml(item.title.substring(0, 60))}</p>
+                        <span class="text-xs text-gray-400">${priceDisplay}</span>
+                    </div>
+                    <input type="number" value="${qty}" min="1" 
+                           class="w-14 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                           onchange="updateBoxQty(${id}, this.value)">
+                    <span class="text-sm font-semibold text-green-400 w-20 text-right">$${amount.toFixed(2)}</span>
+                    <button onclick="removeFromBox(${id})" class="text-red-400 hover:text-red-300 text-lg px-1">×</button>
+                </div>
+            `);
+        }
+
+        box.innerHTML = html.join('');
+        document.getElementById('box-total').textContent = `$${total.toFixed(2)}`;
+        document.getElementById('box-count').textContent = `${boxItems.size} ítems`;
+        genBtn.disabled = false;
+        remitoBtn.disabled = false;
+        initSortable();
+    }
+
+    async function updateNextInvoice() {
+        try {
+            const res = await fetch('/api/config/invoice-counter');
+            const data = await res.json();
+            document.getElementById('next-inv-num').textContent = data.last_number + 1;
+        } catch {
+            document.getElementById('next-inv-num').textContent = '—';
+        }
+    }
+
+    async function generateInvoice() {
+        if (boxItems.size === 0) return;
+
+        const items = [];
+        const quantities = {};
+        let totalAmount = 0;
+        for (const [id, { item, qty }] of boxItems) {
+            items.push(id);
+            quantities[String(id)] = qty;
+            totalAmount += item.price * qty;
+        }
+
+        // Confirmation dialog
+        const confirmed = window.confirm(
+            `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`
+        );
+        if (!confirmed) return;
+
+        const btn = document.getElementById('generate-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Generando...';
+
+        try {
+            const res = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items, quantities, discount: getDiscount() })
+            });
+
+            if (res.ok) {
+                const emailStatus = res.headers.get('X-Email-Status');
+                const emailAddress = res.headers.get('X-Email-Address');
+                const emailError = res.headers.get('X-Email-Error');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = res.headers.get('content-disposition')?.split('filename=')[1] || 'invoice.zip';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                if (emailStatus === 'sent') {
+                    toast(`Invoice generado y enviado a ${emailAddress}`, 'success');
+                } else if (emailStatus === 'error') {
+                    toast(`Invoice generado. Error al enviar email: ${emailError}`, 'warning');
+                } else {
+                    toast('¡Invoice generado! Descargando ZIP...', 'success');
+                }
+                boxItems.clear();
+                renderBox();
+                loadItems();
+                updateNextInvoice();
+            } else {
+                const data = await res.json();
+                toast(data.error || 'Error al generar', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '⚡ Generar Invoice';
+        }
+    }
+
+    // ─── Generate Remito ────────────────────────────────────────────────
+    async function generateRemito() {
+        if (boxItems.size === 0) return;
+
+        const items = [];
+        const quantities = {};
+        let totalAmount = 0;
+        for (const [id, { item, qty }] of boxItems) {
+            items.push(id);
+            quantities[String(id)] = qty;
+            totalAmount += item.price * qty;
+        }
+
+        const confirmed = window.confirm(
+            `¿Generar especial con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nLos ítems se marcarán como facturados.`
+        );
+        if (!confirmed) return;
+
+        const btn = document.getElementById('remito-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Generando...';
+
+        try {
+            const res = await fetch('/api/generate-remito', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items, quantities, discount: getDiscount() })
+            });
+
+            if (res.ok) {
+                const emailStatus = res.headers.get('X-Email-Status');
+                const emailAddress = res.headers.get('X-Email-Address');
+                const emailError = res.headers.get('X-Email-Error');
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = res.headers.get('content-disposition')?.split('filename=')[1] || 'remito.zip';
+                a.click();
+                URL.revokeObjectURL(url);
+
+                if (emailStatus === 'sent') {
+                    toast(`Especial generado y enviado a ${emailAddress}`, 'success');
+                } else if (emailStatus === 'error') {
+                    toast(`Especial generado. Error al enviar email: ${emailError}`, 'warning');
+                } else {
+                    toast('¡Especial generado! Descargando ZIP...', 'success');
+                }
+                boxItems.clear();
+                renderBox();
+                loadItems();
+                updateNextInvoice();
+            } else {
+                const data = await res.json();
+                toast(data.error || 'Error al generar especial', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '📄 Generar Especial';
+        }
+    }
+
+    // ─── History ────────────────────────────────────────────────────────
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/invoices');
+            const invoices = await res.json();
+            const list = document.getElementById('history-list');
+
+            if (invoices.length === 0) {
+                list.innerHTML = `<div class="text-center py-12">
+                    <div class="text-5xl mb-3 opacity-50">📋</div>
+                    <p class="text-gray-500">No hay invoices generados aún</p>
+                    <p class="text-gray-600 text-sm mt-1">Generá uno desde la pestaña de Ítems</p>
+                </div>`;
+                return;
+            }
+
+            list.innerHTML = invoices.map(inv => {
+                const isRemito = inv.type === 'remito';
+                const typeBadge = isRemito 
+                    ? '<span class="badge bg-orange-500/20 text-orange-300 ml-2">Especial</span>'
+                    : '<span class="badge bg-blue-500/20 text-blue-300 ml-2">Invoice</span>';
+                const label = isRemito ? 'Especial' : 'Invoice';
+                return `
+                <div class="card p-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold">
+                                ${label} #${inv.invoice_number}
+                                ${typeBadge}
+                                ${inv.all_sent ? '<span class="badge bg-green-500/20 text-green-300 ml-2">Enviado</span>' : '<span class="badge bg-yellow-500/20 text-yellow-300 ml-2">Pendiente</span>'}
+                            </h3>
+                            <p class="text-sm text-gray-400 mt-1">
+                                📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 $${inv.total.toFixed(2)}
+                            </p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
+                            ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
+                        </div>
+                    </div>
+                    <details class="mt-3">
+                        <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems</summary>
+                        <div class="mt-2 space-y-1">
+                            ${inv.items.map(i => `
+                                <div class="text-xs text-gray-400 flex justify-between">
+                                    <span class="truncate max-w-sm">${escHtml(i.title.substring(0, 60))}</span>
+                                    <span>${i.qty} × $${i.price.toFixed(2)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </details>
+                </div>
+            `}).join('');
+        } catch (err) {
+            toast('Error al cargar historial', 'error');
+        }
+    }
+
+    async function downloadDoc(id, type) {
+        try {
+            const endpoint = type === 'remito' ? `/api/remitos/${id}/download` : `/api/invoices/${id}/download`;
+            const res = await fetch(endpoint);
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = type === 'remito' ? 'remito.zip' : 'invoice.zip';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (err) {
+            toast('Error de descarga', 'error');
+        }
+    }
+
+    async function markSent(id) {
+        try {
+            await fetch(`/api/invoices/${id}/mark-sent`, { method: 'POST' });
+            toast('Invoice marcado como enviado', 'success');
+            loadHistory();
+            loadItems();
+        } catch (err) {
+            toast('Error al marcar como enviado', 'error');
+        }
+    }
+
+    // ─── Copy Tracking ──────────────────────────────────────────────────
+    function copyTracking(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const toast = document.createElement('div');
+            toast.textContent = '✅ Tracking copiado!';
+            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm font-medium';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            const toast = document.createElement('div');
+            toast.textContent = '✅ Tracking copiado!';
+            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm font-medium';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        });
+    }
+
+    // ─── Item Status ────────────────────────────────────────────────────
+    async function changeItemStatus(itemId, newStatus) {
+        try {
+            const res = await fetch(`/api/items/${itemId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast(`Estado actualizado a "${newStatus}"`, 'success');
+                loadItems();
+            } else {
+                toast(data.error || 'Error al cambiar estado', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        }
+    }
+
+    // ─── Helpers ────────────────────────────────────────────────────────
+    function escHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // ─── Delete Item Modal ──────────────────────────────────────────────
+    let deleteItemId = null;
+
+    function deleteItem(id, title) {
+        deleteItemId = id;
+        document.getElementById('delete-modal-text').textContent = `"${title}..."`;
+        const modal = document.getElementById('delete-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.getElementById('delete-confirm-btn').onclick = confirmDelete;
+    }
+
+    function closeDeleteModal() {
+        const modal = document.getElementById('delete-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        deleteItemId = null;
+    }
+
+    async function confirmDelete() {
+        if (!deleteItemId) return;
+        const idToDelete = deleteItemId;
+        closeDeleteModal();
+        try {
+            // Remove from UI immediately
+            allItems = allItems.filter(i => i.id !== idToDelete);
+            boxItems.delete(idToDelete);
+            renderItems();
+            renderBox();
+
+            const res = await fetch(`/api/items/${idToDelete}`, { method: 'DELETE' });
+            if (res.ok) {
+                toast('Ítem eliminado', 'success');
+            } else {
+                const data = await res.json();
+                toast(data.error || 'Error al eliminar', 'error');
+                loadItems(); // reload on error to restore
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+            loadItems(); // reload on error to restore
+        }
+    }
+
+    // ─── SortableJS for Invoice Box ────────────────────────────────────
+    function initSortable() {
+        const box = document.getElementById('invoice-box');
+        if (boxSortable) boxSortable.destroy();
+        boxSortable = Sortable.create(box, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            handle: '.drag-handle',
+            onEnd: function(evt) {
+                // Reorder boxItems Map to match DOM order
+                const newOrder = new Map();
+                box.querySelectorAll('[data-box-id]').forEach(el => {
+                    const id = parseInt(el.dataset.boxId);
+                    if (boxItems.has(id)) newOrder.set(id, boxItems.get(id));
+                });
+                boxItems = newOrder;
+            }
+        });
+    }
+
+    // ─── Init ───────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Sync PO config from backend
+        try {
+            const res = await fetch('/api/config/po');
+            const data = await res.json();
+            if (data.pos) localStorage.setItem('acceptedPOs', JSON.stringify(data.pos));
+        } catch(e) {}
+        const lastTab = localStorage.getItem('lastTab') || 'items';
+        showTab(lastTab);
+        initDropZone();
+    });
+
+    // Register Service Worker with update detection
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        // Check for updates every 60 seconds
+        setInterval(() => reg.update(), 60000);
+
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version available — show update banner
+              showUpdateBanner(newWorker);
+            }
+          });
+        });
+      }).catch(() => {});
+
+      // Reload when the new SW takes over
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+    }
+
+    function showUpdateBanner(worker) {
+      // Remove existing banner if any
+      const old = document.getElementById('update-banner');
+      if (old) old.remove();
+
+      const banner = document.createElement('div');
+      banner.id = 'update-banner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a73e8;color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;z-index:99999;font-family:system-ui;font-size:14px;box-shadow:0 -2px 10px rgba(0,0,0,0.3);';
+      banner.innerHTML = `
+        <span>🔄 Nueva versión disponible</span>
+        <div>
+          <button onclick="document.getElementById('update-banner').remove()" style="background:none;border:1px solid rgba(255,255,255,0.5);color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;margin-right:8px;font-size:13px;">Después</button>
+          <button id="btn-update-now" style="background:#fff;color:#1a73e8;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:13px;">Actualizar</button>
+        </div>
+      `;
+      document.body.appendChild(banner);
+      document.getElementById('btn-update-now').addEventListener('click', () => {
+        worker.postMessage({ type: 'SKIP_WAITING' });
+      });
+    }
+    </script>
+</body>
+</html>
