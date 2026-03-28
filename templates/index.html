@@ -589,7 +589,7 @@
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">ASIN</span>
-                            <p class="text-blue-400 font-mono">${item.asin || '—'}</p>
+                            <p class="text-blue-400 font-mono cursor-pointer hover:text-blue-300 transition-colors" title="Click para copiar: ${escHtml(item.asin || '')}" onclick="copyTracking('${escHtml(item.asin || '')}')">${item.asin || '—'}</p>
                         </div>
                     </div>
                     <!-- Row 3: Actions -->

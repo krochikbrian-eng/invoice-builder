@@ -797,7 +797,7 @@ function renderItems() {
             <div class="item-meta flex flex-wrap gap-x-4 gap-y-1">
                 <span>💲 <span>$${item.price.toFixed(2)} × ${item.qty}</span></span>
                 <span>📅 <span>${item.order_date || '—'}</span></span>
-                ${item.asin ? `<span>ASIN: <span style="color:#89b4fa; font-family:monospace;">${item.asin}</span></span>` : ''}
+                ${item.asin ? `<span style="cursor:pointer;" onclick="copyTracking('${item.asin.replace(/'/g, "\\'")}')">ASIN: <span style="color:#89b4fa; font-family:monospace;">${item.asin}</span></span>` : ''}
                 ${item.tracking ? `<span style="cursor:pointer;" onclick="copyTracking('${item.tracking.replace(/'/g, "\\'")}')">📦 <span style="font-family:monospace; font-size:0.68rem;">${item.tracking.substring(0,22)}${item.tracking.length>22?'…':''}</span></span>` : ''}
                 ${item.multi_item ? '<span class="badge" style="background:rgba(203,166,247,0.2);color:#cba6f7;">Multi</span>' : ''}
             </div>
