@@ -31,10 +31,11 @@ import json as _json
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
 LOGO_PATH = os.path.join(BASE_DIR, 'static', 'zero-logo.png')
-DB_PATH = os.path.join(BASE_DIR, 'invoices.db')
+DB_PATH = os.path.join(DATA_DIR, 'invoices.db')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'invoice-template.xlsx')
-CONFIG_PATH = os.path.join(BASE_DIR, 'config.json')
+CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 
 # ─── Config ─────────────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {'accepted_pos': ['9999', '99999']}
@@ -238,18 +239,29 @@ def parse_csv(file_content):
         # "Subtotal de artículo" is the TOTAL for all units — divide by qty to get unit price
         unit_price = round(price / qty, 2) if qty > 0 else price
 
-        items.append({
-            'order_id': order_id,
-            'asin': asin,
-            'title': title,
-            'price': unit_price,
-            'qty': qty,
-            'po': po_clean,
-            'order_date': fecha,
-            'order_status': estado,
-            'total_neto': total_neto,
-            'tracking': tracking,
-        })
+        key = (order_id, asin, title)
+        existing_idx = next((i for i, x in enumerate(items) if (x['order_id'], x['asin'], x['title']) == key), None)
+        if existing_idx is not None:
+            # Same item appears multiple times (Amazon splits units into separate rows) — merge
+            prev = items[existing_idx]
+            merged_qty = prev['qty'] + qty
+            merged_total = round(prev['price'] * prev['qty'] + unit_price * qty, 2)
+            items[existing_idx]['qty'] = merged_qty
+            items[existing_idx]['price'] = round(merged_total / merged_qty, 2)
+            items[existing_idx]['total_neto'] = round(prev['total_neto'] + total_neto, 2)
+        else:
+            items.append({
+                'order_id': order_id,
+                'asin': asin,
+                'title': title,
+                'price': unit_price,
+                'qty': qty,
+                'po': po_clean,
+                'order_date': fecha,
+                'order_status': estado,
+                'total_neto': total_neto,
+                'tracking': tracking,
+            })
 
     return items
 
@@ -1471,4 +1483,6 @@ def service_worker():
 
 if __name__ == '__main__':
     init_db()
-    app.run(host='0.0.0.0', port=5050, debug=True)
+    port = int(os.environ.get('PORT', 5050))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug)

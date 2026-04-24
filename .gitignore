@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+invoices.db
+invoices.db-shm
+invoices.db-wal
+config.json
+*.zip
+*.pdf
+.env
+.DS_Store
+.claude/
+reference-invoice.pdf
