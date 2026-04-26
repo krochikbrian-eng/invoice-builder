@@ -32,6 +32,7 @@ import json as _json
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
 LOGO_PATH = os.path.join(BASE_DIR, 'static', 'zero-logo.png')
 DB_PATH = os.path.join(DATA_DIR, 'invoices.db')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'invoice-template.xlsx')
@@ -1481,8 +1482,9 @@ def service_worker():
 
 # ─── Main ───────────────────────────────────────────────────────────────────
 
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5050))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)
