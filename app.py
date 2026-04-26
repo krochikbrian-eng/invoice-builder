@@ -99,9 +99,17 @@ def _send_via_resend(api_key: str, cfg: dict, files: list, to_email: str,
         },
         method='POST',
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        if resp.status not in (200, 201):
-            raise ValueError(f"Resend error {resp.status}: {resp.read().decode()}")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 201):
+                raise ValueError(f"Resend error {resp.status}: {resp.read().decode()}")
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode('utf-8', errors='replace')
+        try:
+            detail = _json.loads(body_text).get('message', body_text)
+        except Exception:
+            detail = body_text
+        raise ValueError(f"Resend {e.code}: {detail}")
 
 def _send_via_smtp(cfg: dict, files: list, to_email: str, subject: str, body: str,
                    zip_data=None, zip_filename=None):
