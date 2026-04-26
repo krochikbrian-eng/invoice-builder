@@ -6,6 +6,11 @@
   "deploy": {
     "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --preload",
     "healthcheckPath": "/",
-    "restartPolicyType": "ON_FAILURE"
+    "restartPolicyType": "ON_FAILURE",
+    "volumes": [
+      {
+        "mountPath": "/data"
+      }
+    ]
   }
 }
