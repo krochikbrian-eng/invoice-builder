@@ -427,22 +427,22 @@
                 <p id="email-config-status" style="font-size:12px;margin-top:8px;color:#a6adc8;"></p>
             </div>
 
-            <!-- Resend Email -->
+            <!-- SendGrid Email -->
             <div class="card section-card">
                 <button onclick="toggleSmtp()" style="width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;background:none;border:none;padding:0;cursor:pointer;">
-                    <div class="section-title" style="margin:0;">📧 Configuración de Email (Resend)</div>
+                    <div class="section-title" style="margin:0;">📧 Configuración de Email (SendGrid)</div>
                     <span id="smtp-toggle-icon" style="color:#585b70;font-size:0.75rem;">▼</span>
                 </button>
                 <div id="smtp-section" style="display:none;margin-top:12px;">
-                    <p class="section-desc mb-2">Creá una cuenta gratis en <strong>resend.com</strong> y pegá tu API Key aquí.</p>
+                    <p class="section-desc mb-2">Creá una cuenta gratis en <strong>sendgrid.com</strong>, verificá tu email en Sender Authentication y pegá tu API Key aquí.</p>
                     <div class="mb-2">
                         <div class="section-desc" style="margin-bottom:4px;">API Key</div>
-                        <input type="password" id="resend-api-key" placeholder="re_xxxxxxxxxxxx" style="width:100%;">
+                        <input type="password" id="resend-api-key" placeholder="SG.xxxxxxxxxxxx" style="width:100%;">
                         <p id="resend-key-status" class="text-xs mt-1" style="color:#585b70;"></p>
                     </div>
                     <div class="mb-2">
                         <div class="section-desc" style="margin-bottom:4px;">Email remitente (From)</div>
-                        <input type="text" id="resend-from" placeholder="Zero Inter <invoices@tudominio.com>" style="width:100%;">
+                        <input type="text" id="resend-from" placeholder="zerointerllc@gmail.com" style="width:100%;">
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
                         <button onclick="saveResendConfig()" class="btn-primary px-4 rounded-xl text-sm">Guardar</button>

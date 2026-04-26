@@ -56,49 +56,51 @@ def save_config(cfg):
 def get_accepted_pos():
     return load_config().get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
 
-def _get_resend_key():
-    """Env var takes priority over config.json."""
-    return os.environ.get('RESEND_API_KEY', '') or load_config().get('resend_api_key', '')
+def _get_sendgrid_key():
+    return os.environ.get('SENDGRID_API_KEY', '') or load_config().get('sendgrid_api_key', '')
 
-def _get_resend_from(cfg):
-    return os.environ.get('RESEND_FROM', '') or cfg.get('resend_from', '') or 'Invoice Builder <onboarding@resend.dev>'
+def _get_sendgrid_from(cfg):
+    return os.environ.get('SENDGRID_FROM', '') or cfg.get('sendgrid_from', '')
 
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None):
-    """Send email via Resend API (primary) with SMTP fallback.
-    files: list of (filename, data_bytes, mime_type) tuples.
-    """
     cfg = load_config()
-    resend_key = _get_resend_key()
-    if resend_key:
-        _send_via_resend(resend_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
+    sg_key = _get_sendgrid_key()
+    if sg_key:
+        _send_via_sendgrid(sg_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
     else:
         _send_via_smtp(cfg, files, to_email, subject, body, zip_data, zip_filename)
 
-def _send_via_resend(api_key: str, cfg: dict, files: list, to_email: str,
-                     subject: str, body: str, zip_data=None, zip_filename=None):
-    from_email = _get_resend_from(cfg)
+def _send_via_sendgrid(api_key: str, cfg: dict, files: list, to_email: str,
+                       subject: str, body: str, zip_data=None, zip_filename=None):
+    from_email = _get_sendgrid_from(cfg)
+    if not from_email:
+        raise ValueError("SENDGRID_FROM no configurado — ingresá el email remitente en Configuración")
     attachments = []
     if zip_data and not files:
         attachments.append({
-            'filename': zip_filename or 'invoice.zip',
             'content': base64.b64encode(zip_data).decode(),
+            'filename': zip_filename or 'invoice.zip',
+            'type': 'application/zip',
+            'disposition': 'attachment',
         })
     else:
-        for filename, data, _ in files:
+        for filename, data, mime_type in files:
             attachments.append({
-                'filename': filename,
                 'content': base64.b64encode(data).decode(),
+                'filename': filename,
+                'type': mime_type,
+                'disposition': 'attachment',
             })
     payload = _json.dumps({
-        'from': from_email,
-        'to': [to_email],
+        'personalizations': [{'to': [{'email': to_email}]}],
+        'from': {'email': from_email},
         'subject': subject,
-        'text': body,
+        'content': [{'type': 'text/plain', 'value': body}],
         'attachments': attachments,
     }).encode()
     req = urllib.request.Request(
-        'https://api.resend.com/emails',
+        'https://api.sendgrid.com/v3/mail/send',
         data=payload,
         headers={
             'Authorization': f'Bearer {api_key}',
@@ -108,15 +110,16 @@ def _send_via_resend(api_key: str, cfg: dict, files: list, to_email: str,
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            if resp.status not in (200, 201):
-                raise ValueError(f"Resend error {resp.status}: {resp.read().decode()}")
+            if resp.status not in (200, 201, 202):
+                raise ValueError(f"SendGrid error {resp.status}: {resp.read().decode()}")
     except urllib.error.HTTPError as e:
         body_text = e.read().decode('utf-8', errors='replace')
         try:
-            detail = _json.loads(body_text).get('message', body_text)
+            errors = _json.loads(body_text).get('errors', [])
+            detail = errors[0].get('message', body_text) if errors else body_text
         except Exception:
             detail = body_text
-        raise ValueError(f"Resend {e.code}: {detail}")
+        raise ValueError(f"SendGrid {e.code}: {detail}")
 
 def _send_via_smtp(cfg: dict, files: list, to_email: str, subject: str, body: str,
                    zip_data=None, zip_filename=None):
@@ -1545,8 +1548,8 @@ def test_smtp_config():
 def get_resend_config():
     cfg = load_config()
     return jsonify({
-        'api_key_set': bool(cfg.get('resend_api_key', '')),
-        'from_email': cfg.get('resend_from', ''),
+        'api_key_set': bool(_get_sendgrid_key()),
+        'from_email': _get_sendgrid_from(cfg),
     })
 
 @app.route('/api/config/resend', methods=['PUT'])
@@ -1554,11 +1557,11 @@ def set_resend_config():
     data = request.get_json()
     cfg = load_config()
     if 'api_key' in data and data['api_key']:
-        cfg['resend_api_key'] = str(data['api_key']).strip()
+        cfg['sendgrid_api_key'] = str(data['api_key']).strip()
     if 'from_email' in data:
-        cfg['resend_from'] = str(data['from_email']).strip()
+        cfg['sendgrid_from'] = str(data['from_email']).strip()
     save_config(cfg)
-    return jsonify({'ok': True, 'api_key_set': bool(cfg.get('resend_api_key', '')), 'from_email': cfg.get('resend_from', '')})
+    return jsonify({'ok': True, 'api_key_set': bool(_get_sendgrid_key()), 'from_email': _get_sendgrid_from(cfg)})
 
 @app.route('/sw.js')
 def service_worker():

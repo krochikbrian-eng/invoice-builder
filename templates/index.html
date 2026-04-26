@@ -253,25 +253,25 @@
                     <span id="email-config-status" class="text-xs text-gray-500 mt-1 block"></span>
                 </div>
 
-                <!-- Resend -->
+                <!-- SendGrid -->
                 <div class="card p-5">
                     <button onclick="toggleSmtp()" class="w-full text-left flex items-center justify-between">
-                        <h3 class="text-sm font-semibold text-gray-300">📧 Configuración de Email (Resend)</h3>
+                        <h3 class="text-sm font-semibold text-gray-300">📧 Configuración de Email (SendGrid)</h3>
                         <span id="smtp-toggle-icon" class="text-gray-400 text-xs">▼ Expandir</span>
                     </button>
                     <div id="smtp-section" class="hidden mt-3 space-y-3">
-                        <p class="text-xs text-gray-400">Usamos <strong>Resend</strong> para enviar emails. Creá una cuenta gratis en <a href="https://resend.com" target="_blank" class="text-blue-400 underline">resend.com</a> y pegá tu API Key aquí.</p>
+                        <p class="text-xs text-gray-400">Creá una cuenta gratis en <a href="https://sendgrid.com" target="_blank" class="text-blue-400 underline">sendgrid.com</a>, verificá tu email en <strong>Sender Authentication</strong> y pegá tu API Key aquí.</p>
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">API Key</label>
-                            <input type="password" id="resend-api-key" placeholder="re_xxxxxxxxxxxx"
+                            <input type="password" id="resend-api-key" placeholder="SG.xxxxxxxxxxxx"
                                    class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
                             <span id="resend-key-status" class="text-xs text-gray-500 mt-1 block"></span>
                         </div>
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">Email remitente (From)</label>
-                            <input type="text" id="resend-from" placeholder="Zero Inter <invoices@tudominio.com>"
+                            <input type="text" id="resend-from" placeholder="zerointerllc@gmail.com"
                                    class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
-                            <span class="text-xs text-gray-500 mt-1 block">Si no tenés dominio verificado, dejalo vacío para usar el email de prueba de Resend.</span>
+                            <span class="text-xs text-gray-500 mt-1 block">Tiene que ser el mismo email que verificaste en SendGrid.</span>
                         </div>
                         <div class="flex items-center gap-3 flex-wrap">
                             <button onclick="saveResendConfig()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
