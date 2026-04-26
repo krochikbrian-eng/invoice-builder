@@ -427,34 +427,25 @@
                 <p id="email-config-status" style="font-size:12px;margin-top:8px;color:#a6adc8;"></p>
             </div>
 
-            <!-- SMTP Avanzado -->
+            <!-- Resend Email -->
             <div class="card section-card">
                 <button onclick="toggleSmtp()" style="width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;background:none;border:none;padding:0;cursor:pointer;">
-                    <div class="section-title" style="margin:0;">📧 Configuración SMTP (Avanzado)</div>
+                    <div class="section-title" style="margin:0;">📧 Configuración de Email (Resend)</div>
                     <span id="smtp-toggle-icon" style="color:#585b70;font-size:0.75rem;">▼</span>
                 </button>
                 <div id="smtp-section" style="display:none;margin-top:12px;">
-                    <div class="flex gap-2 mb-2">
-                        <div style="flex:2;">
-                            <div class="section-desc" style="margin-bottom:4px;">Servidor</div>
-                            <input type="text" id="smtp-server" value="smtp.gmail.com" style="width:100%;">
-                        </div>
-                        <div style="flex:1;">
-                            <div class="section-desc" style="margin-bottom:4px;">Puerto</div>
-                            <input type="number" id="smtp-port" value="587" style="width:100%;">
-                        </div>
+                    <p class="section-desc mb-2">Creá una cuenta gratis en <strong>resend.com</strong> y pegá tu API Key aquí.</p>
+                    <div class="mb-2">
+                        <div class="section-desc" style="margin-bottom:4px;">API Key</div>
+                        <input type="password" id="resend-api-key" placeholder="re_xxxxxxxxxxxx" style="width:100%;">
+                        <p id="resend-key-status" class="text-xs mt-1" style="color:#585b70;"></p>
                     </div>
                     <div class="mb-2">
-                        <div class="section-desc" style="margin-bottom:4px;">Usuario</div>
-                        <input type="email" id="smtp-user" placeholder="tu@gmail.com" style="width:100%;">
-                    </div>
-                    <div class="mb-2">
-                        <div class="section-desc" style="margin-bottom:4px;">Contraseña (App Password)</div>
-                        <input type="password" id="smtp-password" placeholder="App password de Gmail" style="width:100%;">
-                        <p id="smtp-password-status" class="text-xs mt-1" style="color:#585b70;"></p>
+                        <div class="section-desc" style="margin-bottom:4px;">Email remitente (From)</div>
+                        <input type="text" id="resend-from" placeholder="Zero Inter <invoices@tudominio.com>" style="width:100%;">
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
-                        <button onclick="saveSmtpConfig()" class="btn-primary px-4 rounded-xl text-sm">Guardar SMTP</button>
+                        <button onclick="saveResendConfig()" class="btn-primary px-4 rounded-xl text-sm">Guardar</button>
                         <button onclick="testSmtpConfig()" class="px-4 py-2 rounded-xl text-sm" style="background:#45475a;color:#cdd6f4;">Probar conexión</button>
                         <span id="smtp-save-status" class="text-xs" style="color:#585b70;"></span>
                     </div>
@@ -624,19 +615,16 @@ async function saveEmailConfig() {
 
 async function loadSmtpConfig() {
     try {
-        const res = await fetch('/api/config/smtp');
+        const res = await fetch('/api/config/resend');
         const data = await res.json();
-        if (data.server) document.getElementById('smtp-server').value = data.server;
-        if (data.port) document.getElementById('smtp-port').value = data.port;
-        if (data.user) document.getElementById('smtp-user').value = data.user;
-        const pwdStatus = document.getElementById('smtp-password-status');
-        if (data.password_set) {
-            pwdStatus.textContent = 'Contraseña: Configurado ✓';
-            document.getElementById('smtp-password').placeholder = '••••••  (dejar vacío para no cambiar)';
+        const keyStatus = document.getElementById('resend-key-status');
+        if (data.api_key_set) {
+            keyStatus.textContent = 'API Key: Configurado ✓';
+            document.getElementById('resend-api-key').placeholder = '••••••  (dejar vacío para no cambiar)';
         } else {
-            pwdStatus.textContent = '';
-            document.getElementById('smtp-password').placeholder = 'App password de Gmail';
+            keyStatus.textContent = '';
         }
+        if (data.from_email) document.getElementById('resend-from').value = data.from_email;
     } catch(e) {}
 }
 
@@ -650,34 +638,32 @@ async function testSmtpConfig() {
         if (data.ok) {
             toast(`Email de prueba enviado a ${data.sent_to}`, 'success');
         } else {
-            toast(`Error SMTP: ${data.error}`, 'error');
+            toast(`Error: ${data.error}`, 'error');
         }
     } catch(e) { toast('Error: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
 }
 
-async function saveSmtpConfig() {
-    const server = document.getElementById('smtp-server').value.trim();
-    const port = parseInt(document.getElementById('smtp-port').value);
-    const user = document.getElementById('smtp-user').value.trim();
-    const password = document.getElementById('smtp-password').value;
+async function saveResendConfig() {
+    const apiKey = document.getElementById('resend-api-key').value.trim();
+    const fromEmail = document.getElementById('resend-from').value.trim();
     try {
-        const body = {server, port, user};
-        if (password) body.password = password;
-        const res = await fetch('/api/config/smtp', {
+        const body = {from_email: fromEmail};
+        if (apiKey) body.api_key = apiKey;
+        const res = await fetch('/api/config/resend', {
             method: 'PUT',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(body)
         });
         const data = await res.json();
         if (res.ok) {
-            toast('Configuración SMTP guardada', 'success');
+            toast('Configuración guardada', 'success');
             document.getElementById('smtp-save-status').textContent = 'Guardado ✓';
-            document.getElementById('smtp-password').value = '';
-            document.getElementById('smtp-password-status').textContent = 'Contraseña: Configurado ✓';
-            document.getElementById('smtp-password').placeholder = '••••••  (dejar vacío para no cambiar)';
+            document.getElementById('resend-api-key').value = '';
+            document.getElementById('resend-key-status').textContent = 'API Key: Configurado ✓';
+            document.getElementById('resend-api-key').placeholder = '••••••  (dejar vacío para no cambiar)';
         } else {
-            toast(data.error || 'Error al guardar SMTP', 'error');
+            toast(data.error || 'Error al guardar', 'error');
         }
     } catch(e) { toast('Error: ' + e.message, 'error'); }
 }

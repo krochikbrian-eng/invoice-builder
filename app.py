@@ -8,6 +8,8 @@ import re
 import sqlite3
 import zipfile
 import smtplib
+import base64
+import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -54,35 +56,68 @@ def save_config(cfg):
 def get_accepted_pos():
     return load_config().get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
 
-def send_email_with_zip(zip_data: bytes, to_email: str, subject: str, body: str, zip_filename: str):
-    """Send a ZIP file as email attachment via SMTP (Gmail TLS). DEPRECATED — use send_email_with_attachments."""
-    send_email_with_attachments([], to_email, subject, body,
-                                 zip_data=zip_data, zip_filename=zip_filename)
-
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None):
-    """Send email with individual file attachments via SMTP (Gmail TLS).
+    """Send email via Resend API (primary) with SMTP fallback.
     files: list of (filename, data_bytes, mime_type) tuples.
-    Falls back to ZIP mode if zip_data is provided (legacy compat).
     """
     cfg = load_config()
+    resend_key = cfg.get('resend_api_key', '')
+    if resend_key:
+        _send_via_resend(resend_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
+    else:
+        _send_via_smtp(cfg, files, to_email, subject, body, zip_data, zip_filename)
+
+def _send_via_resend(api_key: str, cfg: dict, files: list, to_email: str,
+                     subject: str, body: str, zip_data=None, zip_filename=None):
+    from_email = cfg.get('resend_from', 'Invoice Builder <onboarding@resend.dev>')
+    attachments = []
+    if zip_data and not files:
+        attachments.append({
+            'filename': zip_filename or 'invoice.zip',
+            'content': base64.b64encode(zip_data).decode(),
+        })
+    else:
+        for filename, data, _ in files:
+            attachments.append({
+                'filename': filename,
+                'content': base64.b64encode(data).decode(),
+            })
+    payload = _json.dumps({
+        'from': from_email,
+        'to': [to_email],
+        'subject': subject,
+        'text': body,
+        'attachments': attachments,
+    }).encode()
+    req = urllib.request.Request(
+        'https://api.resend.com/emails',
+        data=payload,
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        },
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        if resp.status not in (200, 201):
+            raise ValueError(f"Resend error {resp.status}: {resp.read().decode()}")
+
+def _send_via_smtp(cfg: dict, files: list, to_email: str, subject: str, body: str,
+                   zip_data=None, zip_filename=None):
     smtp_cfg = cfg.get('smtp', {})
     smtp_server = smtp_cfg.get('server', 'smtp.gmail.com')
     smtp_port = int(smtp_cfg.get('port', 587))
     smtp_user = smtp_cfg.get('user', '')
     smtp_password = smtp_cfg.get('password', '')
-
     if not smtp_user or not smtp_password:
         raise ValueError("Credenciales SMTP no configuradas")
-
     msg = MIMEMultipart()
     msg['From'] = smtp_user
     msg['To'] = to_email
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
-
     if zip_data and not files:
-        # Legacy ZIP mode
         attachment = MIMEBase('application', 'zip')
         attachment.set_payload(zip_data)
         encoders.encode_base64(attachment)
@@ -96,7 +131,6 @@ def send_email_with_attachments(files: list, to_email: str, subject: str, body: 
             encoders.encode_base64(attachment)
             attachment.add_header('Content-Disposition', 'attachment', filename=filename)
             msg.attach(attachment)
-
     with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
         server.ehlo()
         server.starttls()
@@ -1485,12 +1519,31 @@ def test_smtp_config():
     try:
         send_email_with_attachments(
             [], to_email,
-            subject='Test SMTP — Invoice Builder',
-            body='Este es un email de prueba enviado desde Invoice Builder.\n\nSi lo recibiste, el SMTP está funcionando correctamente.'
+            subject='Test Email — Invoice Builder',
+            body='Este es un email de prueba enviado desde Invoice Builder.\n\nSi lo recibiste, el envío de emails está funcionando correctamente.'
         )
         return jsonify({'ok': True, 'sent_to': to_email})
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
+
+@app.route('/api/config/resend', methods=['GET'])
+def get_resend_config():
+    cfg = load_config()
+    return jsonify({
+        'api_key_set': bool(cfg.get('resend_api_key', '')),
+        'from_email': cfg.get('resend_from', ''),
+    })
+
+@app.route('/api/config/resend', methods=['PUT'])
+def set_resend_config():
+    data = request.get_json()
+    cfg = load_config()
+    if 'api_key' in data and data['api_key']:
+        cfg['resend_api_key'] = str(data['api_key']).strip()
+    if 'from_email' in data:
+        cfg['resend_from'] = str(data['from_email']).strip()
+    save_config(cfg)
+    return jsonify({'ok': True, 'api_key_set': bool(cfg.get('resend_api_key', '')), 'from_email': cfg.get('resend_from', '')})
 
 @app.route('/sw.js')
 def service_worker():
