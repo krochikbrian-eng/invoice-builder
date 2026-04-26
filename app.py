@@ -92,13 +92,15 @@ def _send_via_sendgrid(api_key: str, cfg: dict, files: list, to_email: str,
                 'type': mime_type,
                 'disposition': 'attachment',
             })
-    payload = _json.dumps({
+    msg = {
         'personalizations': [{'to': [{'email': to_email}]}],
         'from': {'email': from_email},
         'subject': subject,
         'content': [{'type': 'text/plain', 'value': body}],
-        'attachments': attachments,
-    }).encode()
+    }
+    if attachments:
+        msg['attachments'] = attachments
+    payload = _json.dumps(msg).encode()
     req = urllib.request.Request(
         'https://api.sendgrid.com/v3/mail/send',
         data=payload,
