@@ -453,8 +453,9 @@
                         <input type="password" id="smtp-password" placeholder="App password de Gmail" style="width:100%;">
                         <p id="smtp-password-status" class="text-xs mt-1" style="color:#585b70;"></p>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <button onclick="saveSmtpConfig()" class="btn-primary px-4 rounded-xl text-sm">Guardar SMTP</button>
+                        <button onclick="testSmtpConfig()" class="px-4 py-2 rounded-xl text-sm" style="background:#45475a;color:#cdd6f4;">Probar conexión</button>
                         <span id="smtp-save-status" class="text-xs" style="color:#585b70;"></span>
                     </div>
                 </div>
@@ -637,6 +638,22 @@ async function loadSmtpConfig() {
             document.getElementById('smtp-password').placeholder = 'App password de Gmail';
         }
     } catch(e) {}
+}
+
+async function testSmtpConfig() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Probando...';
+    try {
+        const res = await fetch('/api/config/smtp/test', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})});
+        const data = await res.json();
+        if (data.ok) {
+            toast(`Email de prueba enviado a ${data.sent_to}`, 'success');
+        } else {
+            toast(`Error SMTP: ${data.error}`, 'error');
+        }
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
 }
 
 async function saveSmtpConfig() {

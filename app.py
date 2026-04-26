@@ -1476,6 +1476,22 @@ def set_smtp_config():
     save_config(cfg)
     return jsonify({'ok': True, 'server': smtp.get('server'), 'port': smtp.get('port'), 'user': smtp.get('user'), 'password_set': bool(smtp.get('password', ''))})
 
+@app.route('/api/config/smtp/test', methods=['POST'])
+def test_smtp_config():
+    cfg = load_config()
+    to_email = cfg.get('email') or (request.get_json() or {}).get('to')
+    if not to_email:
+        return jsonify({'ok': False, 'error': 'No hay email destino configurado'}), 400
+    try:
+        send_email_with_attachments(
+            [], to_email,
+            subject='Test SMTP — Invoice Builder',
+            body='Este es un email de prueba enviado desde Invoice Builder.\n\nSi lo recibiste, el SMTP está funcionando correctamente.'
+        )
+        return jsonify({'ok': True, 'sent_to': to_email})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
 @app.route('/sw.js')
 def service_worker():
     return send_file(os.path.join(BASE_DIR, 'static', 'sw.js'), mimetype='application/javascript')
