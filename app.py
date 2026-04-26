@@ -56,13 +56,20 @@ def save_config(cfg):
 def get_accepted_pos():
     return load_config().get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
 
+def _get_resend_key():
+    """Env var takes priority over config.json."""
+    return os.environ.get('RESEND_API_KEY', '') or load_config().get('resend_api_key', '')
+
+def _get_resend_from(cfg):
+    return os.environ.get('RESEND_FROM', '') or cfg.get('resend_from', '') or 'Invoice Builder <onboarding@resend.dev>'
+
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None):
     """Send email via Resend API (primary) with SMTP fallback.
     files: list of (filename, data_bytes, mime_type) tuples.
     """
     cfg = load_config()
-    resend_key = cfg.get('resend_api_key', '')
+    resend_key = _get_resend_key()
     if resend_key:
         _send_via_resend(resend_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
     else:
@@ -70,7 +77,7 @@ def send_email_with_attachments(files: list, to_email: str, subject: str, body: 
 
 def _send_via_resend(api_key: str, cfg: dict, files: list, to_email: str,
                      subject: str, body: str, zip_data=None, zip_filename=None):
-    from_email = cfg.get('resend_from', 'Invoice Builder <onboarding@resend.dev>')
+    from_email = _get_resend_from(cfg)
     attachments = []
     if zip_data and not files:
         attachments.append({
