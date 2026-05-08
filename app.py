@@ -209,6 +209,13 @@ def init_db():
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
+    # Fix tracking values stored with ="..." wrapper from Amazon CSV
+    rows = conn.execute("SELECT id, tracking FROM items WHERE tracking LIKE '=\"%\"' OR tracking LIKE '=\"%'").fetchall()
+    for row in rows:
+        cleaned = clean_csv_value(row['tracking'])
+        conn.execute("UPDATE items SET tracking = ? WHERE id = ?", (cleaned, row['id']))
+    if rows:
+        conn.commit()
     conn.close()
 
 def get_next_invoice_number():
@@ -278,7 +285,7 @@ def parse_csv(file_content):
 
         asin = row.get('ASIN', '').strip()
         order_id = row.get('Id. de pedido', '').strip()
-        tracking = row.get('N.º de seguimiento del transportista', '').strip()
+        tracking = clean_csv_value(row.get('N.º de seguimiento del transportista', ''))
         qty_str = row.get('Cantidad de artículos', '1')
         price_str = row.get('Subtotal de artículo', '0')
         fecha = row.get('Fecha del pedido', '').strip()
