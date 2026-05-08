@@ -1420,17 +1420,23 @@ def add_items_to_invoice(invoice_id):
         "SELECT * FROM items WHERE invoice_id = ?", (invoice_id,)
     ).fetchall()
 
-    # Build full item list for file generation
-    def row_to_item(row):
+    # Apply discount only to new items
+    discount = float(data.get('discount', 0) or 0)
+
+    def row_to_item(row, apply_discount=False):
+        price = row['price']
+        if apply_discount and discount > 0:
+            price = round(price * (1 - discount / 100), 1)
         return {
             'title': row['title'],
-            'price': row['price'],
+            'price': price,
             'qty': int(data.get('quantities', {}).get(str(row['id']), row['qty'])),
             'order_id': row['order_id'],
             'tracking': row['tracking'] if 'tracking' in row.keys() else '',
         }
 
-    all_items = [row_to_item(r) for r in existing_rows] + [row_to_item(r) for r in new_rows]
+    all_items = [row_to_item(r, apply_discount=False) for r in existing_rows] + \
+                [row_to_item(r, apply_discount=True) for r in new_rows]
 
     # Recalculate total
     total = sum(i['price'] * i['qty'] for i in all_items)

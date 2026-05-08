@@ -82,7 +82,13 @@
             <div id="add-items-list" class="overflow-y-auto flex-1 space-y-2 pr-1" style="min-height:120px;">
                 <p class="text-gray-500 text-sm text-center py-6">No hay ítems pendientes disponibles.</p>
             </div>
-            <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+            <div class="mt-4 pt-3 border-t border-gray-700 flex items-center gap-2 text-sm">
+                <span class="text-gray-400">Descuento sobre ítems nuevos:</span>
+                <input type="number" id="add-items-discount" value="0" min="0" max="100" step="0.1"
+                       class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400">
+                <span class="text-gray-400">%</span>
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-700">
                 <span id="add-items-selected-count" class="text-sm text-gray-400">0 seleccionados</span>
                 <div class="flex gap-3">
                     <button onclick="closeAddItemsModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
@@ -1181,10 +1187,12 @@
         for (const [id, { qty }] of addItemsSelected) {
             quantities[String(id)] = qty;
         }
+        const discount = parseFloat(document.getElementById('add-items-discount')?.value) || 0;
 
         const label = addItemsTargetType === 'remito' ? 'Especial' : 'Invoice';
+        const discountNote = discount > 0 ? ` con ${discount}% de descuento` : '';
         const confirmed = window.confirm(
-            `¿Agregar ${items.length} ítem(s) al ${label} #${addItemsTargetNumber}?\n\nSe regenerarán los archivos y se enviará el email actualizado.`
+            `¿Agregar ${items.length} ítem(s) al ${label} #${addItemsTargetNumber}${discountNote}?\n\nSe regenerarán los archivos y se enviará el email actualizado.`
         );
         if (!confirmed) return;
 
@@ -1196,7 +1204,7 @@
             const res = await fetch(`/api/invoices/${addItemsTargetInvoiceId}/add-items`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items, quantities })
+                body: JSON.stringify({ items, quantities, discount })
             });
 
             if (res.ok) {
