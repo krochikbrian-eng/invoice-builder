@@ -1389,6 +1389,165 @@ def download_invoice(invoice_id):
         download_name=f'Invoice_{inv["invoice_number"]}.zip'
     )
 
+@app.route('/api/invoices/<int:invoice_id>/add-items', methods=['POST'])
+def add_items_to_invoice(invoice_id):
+    """Add pending items to an already-generated invoice and regenerate files."""
+    data = request.json
+    new_item_ids = data.get('items', [])
+
+    if not new_item_ids:
+        return jsonify({'error': 'No items selected'}), 400
+
+    conn = get_db()
+    inv = conn.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+    if not inv:
+        conn.close()
+        return jsonify({'error': 'Invoice no encontrado'}), 404
+
+    # Fetch new items (must be pending)
+    placeholders = ','.join('?' * len(new_item_ids))
+    new_rows = conn.execute(
+        f"SELECT * FROM items WHERE id IN ({placeholders}) AND status = 'pending'",
+        new_item_ids
+    ).fetchall()
+
+    if not new_rows:
+        conn.close()
+        return jsonify({'error': 'No se encontraron ítems pendientes con esos IDs'}), 400
+
+    # Fetch existing items already in this invoice
+    existing_rows = conn.execute(
+        "SELECT * FROM items WHERE invoice_id = ?", (invoice_id,)
+    ).fetchall()
+
+    # Build full item list for file generation
+    def row_to_item(row):
+        return {
+            'title': row['title'],
+            'price': row['price'],
+            'qty': int(data.get('quantities', {}).get(str(row['id']), row['qty'])),
+            'order_id': row['order_id'],
+            'tracking': row['tracking'] if 'tracking' in row.keys() else '',
+        }
+
+    all_items = [row_to_item(r) for r in existing_rows] + [row_to_item(r) for r in new_rows]
+
+    # Recalculate total
+    total = sum(i['price'] * i['qty'] for i in all_items)
+    invoice_number = inv['invoice_number']
+    invoice_date = datetime.strptime(inv['date'], '%Y-%m-%d').date()
+    inv_type = inv['type'] or 'invoice'
+
+    # Link new items to invoice
+    conn.execute(
+        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
+        [invoice_id] + list(new_item_ids)
+    )
+    # Update invoice totals
+    conn.execute(
+        "UPDATE invoices SET total = ?, items_count = ? WHERE id = ?",
+        (total, len(all_items), invoice_id)
+    )
+    conn.commit()
+    conn.close()
+
+    # Generate TXT trackings
+    orders_grouped = defaultdict(list)
+    for item in all_items:
+        tracking = item.get('tracking', '') or item['order_id']
+        orders_grouped[tracking].append(item['title'])
+    lines = []
+    for oid in sorted(orders_grouped.keys()):
+        titles = orders_grouped[oid]
+        if len(titles) > 1:
+            truncated = [t[:60] for t in titles]
+            lines.append(f"{oid} ({', '.join(truncated)})")
+        else:
+            lines.append(oid)
+    txt_content = '\n'.join(lines)
+
+    # Regenerate files
+    if inv_type == 'remito':
+        pdf_buf = generate_remito_pdf(invoice_number, invoice_date, all_items)
+        pdf_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f'Remito_{invoice_number}.pdf', pdf_buf.read())
+            zf.writestr(f'Remito_{invoice_number}-without-prices.pdf', pdf_no_prices_buf.read())
+            zf.writestr(f'Remito_{invoice_number}_trackings.txt', txt_content)
+        download_name = f'Remito_{invoice_number}.zip'
+    else:
+        xlsx_buf = generate_xlsx(invoice_number, invoice_date, all_items)
+        pdf_buf = generate_pdf(invoice_number, invoice_date, all_items)
+        remito_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f'Invoice_{invoice_number}.xlsx', xlsx_buf.read())
+            zf.writestr(f'Invoice_{invoice_number}.pdf', pdf_buf.read())
+            zf.writestr(f'Remito_{invoice_number}-sin-precios.pdf', remito_no_prices_buf.read())
+            zf.writestr(f'Invoice_{invoice_number}_trackings.txt', txt_content)
+        download_name = f'Invoice_{invoice_number}.zip'
+
+    zip_buf.seek(0)
+    zip_data = zip_buf.read()
+
+    # Try to send email if configured
+    email_status = 'not_configured'
+    email_address = ''
+    email_error = ''
+    cfg = load_config()
+    to_email = cfg.get('email')
+    if to_email:
+        email_address = to_email
+        try:
+            subject = f"{'Remito' if inv_type == 'remito' else 'Invoice'} {invoice_number} (actualizado) — Zero"
+            body_lines = [f"{'Remito' if inv_type == 'remito' else 'Invoice'} #{invoice_number} actualizado — {invoice_date.strftime('%d/%m/%Y')}"]
+            body_lines.append("")
+            body_lines.append("Trackings:")
+            body_lines.append("-" * 40)
+            for line in lines:
+                body_lines.append(line)
+            body_lines.append("")
+            body_lines.append(f"Total: ${total:,.2f}")
+            body = '\n'.join(body_lines)
+
+            if inv_type == 'remito':
+                pdf_buf_e = generate_remito_pdf(invoice_number, invoice_date, all_items)
+                pdf_np_e = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
+                email_files = [
+                    (f'Remito_{invoice_number}.pdf', pdf_buf_e.read(), 'application/pdf'),
+                    (f'Remito_{invoice_number}-without-prices.pdf', pdf_np_e.read(), 'application/pdf'),
+                    (f'Remito_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
+                ]
+            else:
+                xlsx_e = generate_xlsx(invoice_number, invoice_date, all_items)
+                pdf_e = generate_pdf(invoice_number, invoice_date, all_items)
+                remito_e = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
+                email_files = [
+                    (f'Invoice_{invoice_number}.xlsx', xlsx_e.read(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+                    (f'Invoice_{invoice_number}.pdf', pdf_e.read(), 'application/pdf'),
+                    (f'Remito_{invoice_number}-sin-precios.pdf', remito_e.read(), 'application/pdf'),
+                    (f'Invoice_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
+                ]
+            send_email_with_attachments(email_files, to_email, subject, body)
+            email_status = 'sent'
+        except Exception as exc:
+            email_status = 'error'
+            email_error = str(exc)
+
+    response = make_response(send_file(
+        io.BytesIO(zip_data),
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=download_name
+    ))
+    response.headers['X-Email-Status'] = email_status
+    response.headers['X-Email-Address'] = email_address
+    response.headers['X-Email-Error'] = email_error
+    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
+    return response
+
+
 @app.route('/api/invoices/<int:invoice_id>/mark-sent', methods=['POST'])
 def mark_sent(invoice_id):
     """Mark all items in an invoice as sent."""

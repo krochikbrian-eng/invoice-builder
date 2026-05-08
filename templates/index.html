@@ -71,6 +71,29 @@
         </div>
     </div>
 
+    <!-- Add Items to Invoice modal -->
+    <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(0,0,0,0.7);">
+        <div class="card p-6 mx-auto w-full max-w-2xl" style="max-height:85vh;display:flex;flex-direction:column;">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">➕ Agregar ítems al <span id="add-items-modal-title">Invoice</span></h3>
+                <button onclick="closeAddItemsModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+            </div>
+            <p class="text-xs text-gray-400 mb-3">Seleccioná los ítems pendientes que querés sumar. Se regenerarán los archivos y se enviará el email actualizado.</p>
+            <div id="add-items-list" class="overflow-y-auto flex-1 space-y-2 pr-1" style="min-height:120px;">
+                <p class="text-gray-500 text-sm text-center py-6">No hay ítems pendientes disponibles.</p>
+            </div>
+            <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+                <span id="add-items-selected-count" class="text-sm text-gray-400">0 seleccionados</span>
+                <div class="flex gap-3">
+                    <button onclick="closeAddItemsModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
+                    <button id="add-items-confirm-btn" onclick="confirmAddItems()" class="btn-primary px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        ⚡ Agregar y regenerar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <header class="border-b border-gray-700/50 px-6 py-4">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -893,8 +916,9 @@
                                 📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 $${inv.total.toFixed(2)}
                             </p>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap">
                             <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
+                            <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
                             ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
                         </div>
                     </div>
@@ -1058,6 +1082,158 @@
                 boxItems = newOrder;
             }
         });
+    }
+
+    // ─── Add Items to Existing Invoice ──────────────────────────────────
+    let addItemsTargetInvoiceId = null;
+    let addItemsTargetType = 'invoice';
+    let addItemsTargetNumber = null;
+    let addItemsSelected = new Map(); // id -> {item, qty}
+
+    function openAddItemsModal(invoiceId, invoiceType, invoiceNumber) {
+        addItemsTargetInvoiceId = invoiceId;
+        addItemsTargetType = invoiceType;
+        addItemsTargetNumber = invoiceNumber;
+        addItemsSelected = new Map();
+
+        const label = invoiceType === 'remito' ? 'Especial' : 'Invoice';
+        document.getElementById('add-items-modal-title').textContent = `${label} #${invoiceNumber}`;
+
+        renderAddItemsList();
+
+        const modal = document.getElementById('add-items-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function closeAddItemsModal() {
+        const modal = document.getElementById('add-items-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        addItemsTargetInvoiceId = null;
+        addItemsSelected = new Map();
+    }
+
+    function renderAddItemsList() {
+        const pending = allItems.filter(i => i.status === 'pending');
+        const list = document.getElementById('add-items-list');
+        const confirmBtn = document.getElementById('add-items-confirm-btn');
+        const countEl = document.getElementById('add-items-selected-count');
+
+        if (pending.length === 0) {
+            list.innerHTML = '<p class="text-gray-500 text-sm text-center py-6">No hay ítems pendientes disponibles.</p>';
+            confirmBtn.disabled = true;
+            return;
+        }
+
+        list.innerHTML = pending.map(item => {
+            const isChecked = addItemsSelected.has(item.id);
+            const qty = isChecked ? addItemsSelected.get(item.id).qty : item.qty;
+            const total = (item.price * qty).toFixed(2);
+            return `
+                <div class="card p-3 flex items-start gap-3 ${isChecked ? 'border-blue-400/60' : ''}" onclick="toggleAddItem(${item.id})" style="cursor:pointer;">
+                    <input type="checkbox" ${isChecked ? 'checked' : ''} class="mt-0.5 accent-blue-400 w-4 h-4 shrink-0 pointer-events-none">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-semibold leading-snug">${escHtml(item.title.substring(0, 80))}${item.title.length > 80 ? '...' : ''}</p>
+                        <p class="text-xs text-gray-400 mt-0.5">$${item.price.toFixed(2)} × ${item.qty} = <span class="text-green-400 font-semibold">$${total}</span>
+                            <span class="ml-2 text-gray-500 font-mono">${item.tracking || item.order_id}</span>
+                        </p>
+                    </div>
+                    ${isChecked ? `
+                    <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                        <label class="text-xs text-gray-500">Qty:</label>
+                        <input type="number" value="${qty}" min="1"
+                               class="w-14 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                               onchange="updateAddItemQty(${item.id}, this.value)">
+                    </div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        const count = addItemsSelected.size;
+        countEl.textContent = `${count} seleccionado${count !== 1 ? 's' : ''}`;
+        confirmBtn.disabled = count === 0;
+    }
+
+    function toggleAddItem(itemId) {
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) return;
+        if (addItemsSelected.has(itemId)) {
+            addItemsSelected.delete(itemId);
+        } else {
+            addItemsSelected.set(itemId, { item, qty: item.qty });
+        }
+        renderAddItemsList();
+    }
+
+    function updateAddItemQty(itemId, qtyVal) {
+        const entry = addItemsSelected.get(itemId);
+        if (entry) {
+            entry.qty = Math.max(1, parseInt(qtyVal) || 1);
+        }
+    }
+
+    async function confirmAddItems() {
+        if (!addItemsTargetInvoiceId || addItemsSelected.size === 0) return;
+
+        const items = [...addItemsSelected.keys()];
+        const quantities = {};
+        for (const [id, { qty }] of addItemsSelected) {
+            quantities[String(id)] = qty;
+        }
+
+        const label = addItemsTargetType === 'remito' ? 'Especial' : 'Invoice';
+        const confirmed = window.confirm(
+            `¿Agregar ${items.length} ítem(s) al ${label} #${addItemsTargetNumber}?\n\nSe regenerarán los archivos y se enviará el email actualizado.`
+        );
+        if (!confirmed) return;
+
+        const btn = document.getElementById('add-items-confirm-btn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Procesando...';
+
+        try {
+            const res = await fetch(`/api/invoices/${addItemsTargetInvoiceId}/add-items`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items, quantities })
+            });
+
+            if (res.ok) {
+                const emailStatus = res.headers.get('X-Email-Status');
+                const emailAddress = res.headers.get('X-Email-Address');
+                const emailError = res.headers.get('X-Email-Error');
+
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = res.headers.get('content-disposition')?.split('filename=')[1]
+                    || (addItemsTargetType === 'remito' ? `Remito_${addItemsTargetNumber}.zip` : `Invoice_${addItemsTargetNumber}.zip`);
+                a.click();
+                URL.revokeObjectURL(url);
+
+                closeAddItemsModal();
+
+                if (emailStatus === 'sent') {
+                    toast(`${label} #${addItemsTargetNumber} actualizado y enviado a ${emailAddress}`, 'success');
+                } else if (emailStatus === 'error') {
+                    toast(`Archivos generados. Error al enviar email: ${emailError}`, 'warning');
+                } else {
+                    toast(`${label} #${addItemsTargetNumber} actualizado. Descargando ZIP...`, 'success');
+                }
+                loadItems();
+                loadHistory();
+            } else {
+                const data = await res.json();
+                toast(data.error || 'Error al agregar ítems', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '⚡ Agregar y regenerar';
+        }
     }
 
     // ─── Init ───────────────────────────────────────────────────────────
