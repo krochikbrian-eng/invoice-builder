@@ -289,13 +289,13 @@
                         </select>
                     </div>
                     <!-- Bulk actions bar -->
-                    <div id="bulk-bar" class="hidden card p-3 mb-3 flex items-center gap-2 flex-wrap" style="border-color: rgba(137,180,250,0.4);">
-                        <span id="bulk-count" class="text-sm font-semibold text-blue-300"></span>
-                        <span class="text-xs text-gray-500">→ cambiar a:</span>
-                        <button onclick="bulkSetStatus('pending')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium">⏳ Pendiente</button>
-                        <button onclick="bulkSetStatus('invoiced')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium">📄 Facturado</button>
-                        <button onclick="bulkSetStatus('sent')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs font-medium">✈️ Enviado</button>
-                        <button onclick="clearSelection()" class="text-xs text-gray-400 hover:text-red-400 ml-auto px-2 py-1.5 transition">× Deseleccionar</button>
+                    <div id="bulk-bar" class="hidden card mb-3 items-center gap-1.5 whitespace-nowrap" style="border-color: rgba(137,180,250,0.4); padding: .5rem .75rem;">
+                        <span id="bulk-count" class="text-xs font-bold text-blue-300 shrink-0"></span>
+                        <span class="text-gray-600 shrink-0" style="font-size:.7rem;">→</span>
+                        <button onclick="bulkSetStatus('pending')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">⏳ Pendiente</button>
+                        <button onclick="bulkSetStatus('invoiced')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">📄 Facturado</button>
+                        <button onclick="bulkSetStatus('sent')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">✈️ Enviado</button>
+                        <button onclick="clearSelection()" class="text-gray-400 hover:text-red-400 ml-auto rounded-md px-1.5 py-1 hover:bg-red-400/10 transition-colors shrink-0" style="font-size:.85rem; line-height:1;" title="Deseleccionar todo">✕</button>
                     </div>
                     <div id="items-list" class="space-y-2.5 max-h-[68vh] overflow-y-auto pr-2">
                         <div class="text-center py-12">
