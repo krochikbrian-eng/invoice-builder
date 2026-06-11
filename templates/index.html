@@ -252,8 +252,8 @@
 
         <!-- Items Tab -->
         <section id="tab-items" class="tab-content hidden">
-            <!-- Stats dashboard -->
-            <div id="stats-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5"></div>
+            <!-- Stats -->
+            <div id="stats-bar" class="flex mb-5"></div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Available Items -->
@@ -716,25 +716,13 @@
         const bar = document.getElementById('stats-bar');
         if (!bar) return;
         const statusFilter = document.getElementById('filter-status').value;
-        const sum = arr => arr.reduce((a, i) => a + i.price * i.qty, 0);
         const pending = allItems.filter(i => i.status === 'pending');
-        const invoiced = allItems.filter(i => i.status === 'invoiced');
-        const sent = allItems.filter(i => i.status === 'sent');
-        const stats = [
-            { key: 'pending',  label: 'Pendientes', icon: '🔵', items: pending,  color: 'text-blue-300' },
-            { key: 'invoiced', label: 'Facturados', icon: '🟡', items: invoiced, color: 'text-yellow-300' },
-            { key: 'sent',     label: 'Enviados',   icon: '🟢', items: sent,     color: 'text-green-300' },
-            { key: 'all',      label: 'Total',      icon: '📦', items: allItems, color: 'text-gray-200' },
-        ];
-        bar.innerHTML = stats.map(s => `
-            <div class="stat-chip ${statusFilter === s.key ? 'active' : ''}" onclick="setStatusFilter('${s.key}')" title="Filtrar: ${s.label}">
-                <div class="flex items-center justify-between">
-                    <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">${s.icon} ${s.label}</span>
-                    <span class="text-xs ${s.color} font-semibold">${s.items.length}</span>
-                </div>
-                <div class="text-lg font-bold ${s.color} tabular-nums mt-0.5">${fmtMoney(sum(s.items))}</div>
+        bar.innerHTML = `
+            <div class="stat-chip ${statusFilter === 'pending' ? 'active' : ''}" onclick="setStatusFilter('pending')" title="Filtrar: Pendientes" style="min-width:180px;">
+                <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">🔵 Pendientes de envío</span>
+                <div class="text-2xl font-bold text-blue-300 tabular-nums mt-0.5">${pending.length} <span class="text-sm font-medium text-gray-500">producto${pending.length !== 1 ? 's' : ''}</span></div>
             </div>
-        `).join('');
+        `;
     }
 
     function renderItems() {
