@@ -252,14 +252,11 @@
 
         <!-- Items Tab -->
         <section id="tab-items" class="tab-content hidden">
-            <!-- Stats -->
-            <div id="stats-bar" class="flex mb-5"></div>
-
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Available Items -->
                 <div>
                     <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                        <h2 class="text-xl font-semibold">📦 Ítems Disponibles</h2>
+                        <h2 class="text-xl font-semibold">📦 Ítems Disponibles <span id="pending-count" class="text-blue-300"></span></h2>
                         <span class="text-xs text-gray-500">Tip: <kbd>/</kbd> para buscar · click en título/tracking/ASIN copia</span>
                     </div>
                     <div class="flex gap-2 items-center mb-3 flex-wrap">
@@ -695,11 +692,6 @@
         filterItems();
     }
 
-    function setStatusFilter(status) {
-        document.getElementById('filter-status').value = status;
-        renderItems();
-    }
-
     function fmtMoney(n) {
         return '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
@@ -713,16 +705,10 @@
     }
 
     function renderStats() {
-        const bar = document.getElementById('stats-bar');
-        if (!bar) return;
-        const statusFilter = document.getElementById('filter-status').value;
-        const pending = allItems.filter(i => i.status === 'pending');
-        bar.innerHTML = `
-            <div class="stat-chip ${statusFilter === 'pending' ? 'active' : ''}" onclick="setStatusFilter('pending')" title="Filtrar: Pendientes" style="min-width:180px;">
-                <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">🔵 Pendientes de envío</span>
-                <div class="text-2xl font-bold text-blue-300 tabular-nums mt-0.5">${pending.length} <span class="text-sm font-medium text-gray-500">producto${pending.length !== 1 ? 's' : ''}</span></div>
-            </div>
-        `;
+        const el = document.getElementById('pending-count');
+        if (!el) return;
+        const pendingCount = allItems.filter(i => i.status === 'pending').length;
+        el.textContent = `(${pendingCount})`;
     }
 
     function renderItems() {
