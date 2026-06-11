@@ -9,8 +9,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Envíos">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
-    <meta name="theme-color" content="#11111b">
+    <meta name="theme-color" content="#0d0d15">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%234c6ef5'/><stop offset='1' stop-color='%2389b4fa'/></linearGradient></defs><rect width='32' height='32' rx='7' fill='url(%23g)'/><path d='M9 6h10l4 4v14a2 2 0 01-2 2H9a2 2 0 01-2-2V8a2 2 0 012-2z' fill='white' opacity='.92'/><path d='M19 6v4h4' fill='none' stroke='%234c6ef5' stroke-width='1.2'/><rect x='10' y='12' width='10' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><rect x='10' y='15.5' width='7' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><rect x='10' y='19' width='8.5' height='1.5' rx='.75' fill='%234c6ef5' opacity='.25'/><circle cx='22' cy='22' r='7' fill='%23fab387'/><path d='M22 18.5v7M18.5 22h7' stroke='white' stroke-width='2' stroke-linecap='round'/></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>
@@ -20,39 +23,133 @@
                 extend: {
                     colors: {
                         dark: { 800: '#1e1e2e', 900: '#11111b', 700: '#313244', 600: '#45475a' }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
                     }
                 }
             }
         }
     </script>
     <style>
-        body { background: #11111b; color: #cdd6f4; }
-        .card { background: #1e1e2e; border: 1px solid #313244; border-radius: 0.75rem; transition: all 0.2s ease; }
-        .card-hover:hover { border-color: #89b4fa; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .btn-primary { background: #89b4fa; color: #1e1e2e; font-weight: 600; }
-        .btn-primary:hover { background: #74c7ec; }
-        .btn-danger { background: #f38ba8; color: #1e1e2e; }
-        .btn-danger:hover { background: #eba0ac; }
-        .btn-success { background: #a6e3a1; color: #1e1e2e; }
-        .btn-success:hover { background: #94e2d5; }
+        :root {
+            --bg: #0d0d15;
+            --surface: #16161f;
+            --surface-2: #1c1c28;
+            --border: #2a2a3a;
+            --border-hover: #89b4fa;
+            --text: #cdd6f4;
+            --text-dim: #7f849c;
+            --blue: #89b4fa;
+            --green: #a6e3a1;
+            --yellow: #f9e2af;
+            --orange: #fab387;
+            --red: #f38ba8;
+            --purple: #cba6f7;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; }
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background: radial-gradient(ellipse 70% 45% at 50% -10%, rgba(137,180,250,0.07), transparent);
+        }
+        .font-mono, .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 0.875rem; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+        .card-hover:hover {
+            border-color: rgba(137,180,250,0.45);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(137,180,250,0.08);
+            transform: translateY(-1px);
+        }
+        /* Status accent stripe */
+        .item-card { position: relative; overflow: hidden; }
+        .item-card::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+            background: var(--blue); opacity: .85;
+        }
+        .item-card.st-invoiced::before { background: var(--yellow); }
+        .item-card.st-sent::before { background: var(--green); }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #89b4fa, #74a8f7); color: #11111b; font-weight: 600;
+            transition: filter .15s ease, transform .1s ease, box-shadow .15s ease;
+        }
+        .btn-primary:hover:not(:disabled) { filter: brightness(1.12); box-shadow: 0 4px 14px rgba(137,180,250,0.3); }
+        .btn-primary:active:not(:disabled) { transform: scale(.98); }
+        .btn-danger { background: var(--red); color: #11111b; font-weight: 600; }
+        .btn-danger:hover { filter: brightness(1.1); }
+        .btn-success { background: var(--green); color: #11111b; font-weight: 600; }
+        .btn-success:hover { filter: brightness(1.1); }
+        .btn-ghost {
+            background: rgba(137,180,250,0.08); border: 1px solid rgba(137,180,250,0.2); color: var(--blue);
+            transition: background .15s ease;
+        }
+        .btn-ghost:hover { background: rgba(137,180,250,0.16); }
+
+        input, select { color-scheme: dark; }
+        .field {
+            background: var(--surface-2); border: 1px solid var(--border); border-radius: 0.5rem;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .field:focus, .field:focus-within { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(137,180,250,0.12); }
+
         .sortable-ghost { opacity: 0.4; }
         .sortable-chosen { transform: scale(1.02); }
-        .used-item { border-color: rgba(75, 85, 99, 0.3); background: rgba(31, 41, 55, 0.5); opacity: 0.5; }
-        .used-item .item-title { }
-        .used-item .item-data { }
-        .used-item select { opacity: 1; position: relative; z-index: 1; }
-        .badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 9999px; }
-        .tab-active { border-bottom: 2px solid #89b4fa; color: #89b4fa; background: rgba(137, 180, 250, 0.1); border-radius: 0.5rem 0.5rem 0 0; }
-        .drop-zone { border: 2px dashed #45475a; min-height: 200px; transition: all 0.2s; }
-        .drop-zone.drag-over { border-color: #89b4fa; background: #89b4fa11; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #11111b; }
-        ::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
-        .upload-area { border: 2px dashed #45475a; transition: all 0.3s; cursor: pointer; }
-        .upload-area:hover, .upload-area.drag-over { border-color: #89b4fa; background: #89b4fa11; }
-        .toast { animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s; }
-        @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes fadeOut { to { opacity: 0; } }
+        .used-item { opacity: 0.55; }
+        .used-item:hover { opacity: 0.85; }
+        .badge { font-size: 0.65rem; padding: 2px 8px; border-radius: 9999px; font-weight: 600; letter-spacing: .02em; }
+
+        /* Header / tabs */
+        header.app-header {
+            position: sticky; top: 0; z-index: 40;
+            background: rgba(13,13,21,0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+        }
+        .tab-btn { position: relative; color: var(--text-dim); font-weight: 500; transition: color .15s ease, background .15s ease; }
+        .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        .tab-active { color: var(--blue) !important; background: rgba(137,180,250,0.12) !important; font-weight: 600; }
+
+        /* Stat chips */
+        .stat-chip {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
+            padding: .65rem .9rem; cursor: pointer; transition: all .15s ease; user-select: none;
+        }
+        .stat-chip:hover { border-color: rgba(137,180,250,0.4); transform: translateY(-1px); }
+        .stat-chip.active { border-color: var(--blue); background: rgba(137,180,250,0.09); box-shadow: 0 0 0 1px rgba(137,180,250,0.25); }
+
+        /* Copyable */
+        .copyable { cursor: pointer; position: relative; transition: color .12s ease; }
+        .copyable:hover { color: var(--blue) !important; }
+        .copyable .copy-ic { opacity: 0; transition: opacity .12s ease; vertical-align: -2px; margin-left: 4px; }
+        .copyable:hover .copy-ic { opacity: .8; }
+        .copyable.copied { color: var(--green) !important; }
+
+        .drop-zone { border: 2px dashed var(--border); min-height: 200px; transition: all 0.2s; border-radius: .75rem; }
+        .drop-zone.drag-over { border-color: var(--blue); background: rgba(137,180,250,0.06); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3a3a4e; border-radius: 4px; border: 2px solid var(--bg); }
+        ::-webkit-scrollbar-thumb:hover { background: #4a4a62; }
+
+        .upload-area { border: 2px dashed var(--border); transition: all 0.3s; cursor: pointer; }
+        .upload-area:hover, .upload-area.drag-over { border-color: var(--blue); background: rgba(137,180,250,0.05); }
+
+        .toast { animation: slideIn 0.3s cubic-bezier(.21,1.02,.73,1), fadeOut 0.3s ease 2.7s forwards; display: flex; align-items: center; gap: .5rem; }
+        @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateX(10px); } }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        .anim-in { animation: fadeUp .25s ease both; }
+
+        kbd {
+            background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px;
+            border-radius: 4px; padding: 0 5px; font-size: .7rem; font-family: 'JetBrains Mono', monospace;
+        }
+        .modal-backdrop { background: rgba(0,0,0,0.65); backdrop-filter: blur(3px); }
     </style>
 </head>
 <body class="min-h-screen">
@@ -60,8 +157,8 @@
     <div id="toasts" class="fixed top-4 right-4 z-50 space-y-2"></div>
 
     <!-- Delete confirmation modal -->
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(0,0,0,0.6);">
-        <div class="card p-6 max-w-md mx-auto">
+    <div id="delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeDeleteModal()">
+        <div class="card p-6 max-w-md mx-auto anim-in">
             <h3 class="text-lg font-semibold mb-2">¿Eliminar ítem?</h3>
             <p id="delete-modal-text" class="text-sm text-gray-400 mb-4"></p>
             <div class="flex gap-3 justify-end">
@@ -72,8 +169,8 @@
     </div>
 
     <!-- Add Items to Invoice modal -->
-    <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background: rgba(0,0,0,0.7);">
-        <div class="card p-6 mx-auto w-full max-w-2xl" style="max-height:85vh;display:flex;flex-direction:column;">
+    <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeAddItemsModal()">
+        <div class="card p-6 mx-auto w-full max-w-2xl anim-in" style="max-height:85vh;display:flex;flex-direction:column;">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold">➕ Agregar ítems al <span id="add-items-modal-title">Invoice</span></h3>
                 <button onclick="closeAddItemsModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
@@ -85,7 +182,7 @@
             <div class="mt-4 pt-3 border-t border-gray-700 flex items-center gap-2 text-sm">
                 <span class="text-gray-400">Descuento sobre ítems nuevos:</span>
                 <input type="number" id="add-items-discount" value="0" min="0" max="100" step="0.1"
-                       class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400">
+                       class="field w-20 px-2 py-1 text-xs text-center">
                 <span class="text-gray-400">%</span>
             </div>
             <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-700">
@@ -101,10 +198,10 @@
     </div>
 
     <!-- Header -->
-    <header class="border-b border-gray-700/50 px-6 py-4">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <header class="app-header px-6 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="showTab('items')">
+                <svg width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="4" y="2" width="24" height="32" rx="3" fill="#313244" stroke="#89b4fa" stroke-width="1.5"/>
                     <rect x="8" y="10" width="16" height="2" rx="1" fill="#585b70"/>
                     <rect x="8" y="15" width="12" height="2" rx="1" fill="#585b70"/>
@@ -114,21 +211,21 @@
                     <path d="M28 20v10l3-3" stroke="#f9e2af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     <path d="M25 27l3 3" stroke="#f9e2af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <h1 class="text-2xl font-bold cursor-pointer" onclick="showTab('items')">
-                    <span class="text-yellow-300">⚡</span> Gestión de Envíos
-                    <span class="text-sm font-normal text-gray-500 ml-2">Zero International</span>
-                </h1>
+                <div>
+                    <h1 class="text-lg font-bold leading-tight">Gestión de Envíos</h1>
+                    <p class="text-xs text-gray-500 leading-tight">Zero International</p>
+                </div>
             </div>
-            <div class="flex gap-1">
-                <button onclick="showTab('upload')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="upload">📤 Subir CSV</button>
-                <button onclick="showTab('items')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="items">📦 Ítems</button>
-                <button onclick="showTab('history')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="history">📋 Historial</button>
-                <button onclick="showTab('config')" class="tab-btn px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50 transition" data-tab="config">⚙️ Configuración</button>
+            <div class="flex gap-1 bg-black/20 rounded-xl p-1">
+                <button onclick="showTab('upload')" class="tab-btn px-4 py-2 rounded-lg text-sm" data-tab="upload">📤 Subir CSV</button>
+                <button onclick="showTab('items')" class="tab-btn px-4 py-2 rounded-lg text-sm" data-tab="items">📦 Ítems</button>
+                <button onclick="showTab('history')" class="tab-btn px-4 py-2 rounded-lg text-sm" data-tab="history">📋 Historial</button>
+                <button onclick="showTab('config')" class="tab-btn px-4 py-2 rounded-lg text-sm" data-tab="config">⚙️ Configuración</button>
             </div>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-6 py-6">
+    <main class="max-w-7xl mx-auto px-6 py-6 relative z-10">
         <!-- Upload Tab -->
         <section id="tab-upload" class="tab-content">
             <div class="card p-8 max-w-2xl mx-auto">
@@ -155,27 +252,40 @@
 
         <!-- Items Tab -->
         <section id="tab-items" class="tab-content hidden">
+            <!-- Stats dashboard -->
+            <div id="stats-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5"></div>
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Available Items -->
                 <div>
-                    <div class="flex items-center justify-between mb-4">
-                        <div>
-                            <h2 class="text-xl font-semibold">📦 Ítems Disponibles</h2>
-                            <div id="status-counter" class="flex gap-3 text-xs text-gray-500 mt-1"></div>
-                        </div>
-                        <div class="flex gap-2 items-center">
-                            <input type="text" id="search-items" placeholder="Buscar..." 
-                                   class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400"
-                                   oninput="filterItems()">
-                            <select id="filter-status" class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none" onchange="filterItems()">
-                                <option value="all">Todos</option>
-                                <option value="pending" selected>Pendiente</option>
-                                <option value="invoiced">Facturado</option>
-                                <option value="sent">Enviado</option>
-                            </select>
-                        </div>
+                    <div class="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                        <h2 class="text-xl font-semibold">📦 Ítems Disponibles</h2>
+                        <span class="text-xs text-gray-500">Tip: <kbd>/</kbd> para buscar · click en título/tracking/ASIN copia</span>
                     </div>
-                    <div id="items-list" class="space-y-2 max-h-[70vh] overflow-y-auto pr-2">
+                    <div class="flex gap-2 items-center mb-3 flex-wrap">
+                        <div class="field flex items-center gap-2 px-3 py-1.5 flex-1 min-w-[160px]">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="text-gray-500 shrink-0"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                            <input type="text" id="search-items" placeholder="Buscar título, tracking, ASIN..."
+                                   class="bg-transparent text-sm focus:outline-none w-full"
+                                   oninput="filterItems()">
+                            <button id="search-clear" onclick="clearSearch()" class="text-gray-500 hover:text-white text-sm hidden">×</button>
+                        </div>
+                        <select id="filter-status" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
+                            <option value="all">Todos</option>
+                            <option value="pending" selected>Pendiente</option>
+                            <option value="invoiced">Facturado</option>
+                            <option value="sent">Enviado</option>
+                        </select>
+                        <select id="sort-items" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
+                            <option value="default">Orden original</option>
+                            <option value="date_desc">Fecha ↓ (reciente)</option>
+                            <option value="date_asc">Fecha ↑ (antiguo)</option>
+                            <option value="price_desc">Precio ↓ (mayor)</option>
+                            <option value="price_asc">Precio ↑ (menor)</option>
+                            <option value="title_asc">Título A→Z</option>
+                        </select>
+                    </div>
+                    <div id="items-list" class="space-y-2.5 max-h-[68vh] overflow-y-auto pr-2">
                         <div class="text-center py-12">
                             <div class="text-5xl mb-3 opacity-50">📦</div>
                             <p class="text-gray-500">No hay ítems cargados</p>
@@ -197,14 +307,18 @@
                         <div class="mt-3 px-1 flex items-center gap-2 text-sm">
                             <span class="text-gray-400">Descuento:</span>
                             <input type="number" id="discount-input" value="0" min="0" max="100" step="0.1"
-                                   class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                                   class="field w-20 px-2 py-1 text-xs text-center"
                                    oninput="renderBox()">
                             <span class="text-gray-400">%</span>
                         </div>
                         <div class="mt-4 pt-4 border-t border-gray-700">
+                            <div id="box-breakdown" class="space-y-1 text-sm text-gray-400 mb-2 hidden">
+                                <div class="flex justify-between"><span>Subtotal:</span><span id="box-subtotal" class="tabular-nums">$0.00</span></div>
+                                <div class="flex justify-between text-yellow-300"><span>Descuento (<span id="box-disc-pct">0</span>%):</span><span id="box-disc-amount" class="tabular-nums">-$0.00</span></div>
+                            </div>
                             <div class="flex justify-between items-center text-lg font-semibold">
                                 <span>Total:</span>
-                                <span id="box-total" class="text-green-400">$0.00</span>
+                                <span id="box-total" class="text-green-400 tabular-nums">$0.00</span>
                             </div>
                             <div class="flex justify-between items-center text-sm text-gray-400 mt-1">
                                 <span id="box-count">0 ítems</span>
@@ -233,7 +347,17 @@
 
         <!-- History Tab -->
         <section id="tab-history" class="tab-content hidden">
-            <h2 class="text-xl font-semibold mb-4">📋 Historial de Invoices</h2>
+            <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <h2 class="text-xl font-semibold">📋 Historial de Invoices</h2>
+                <div class="flex items-center gap-3">
+                    <span id="history-stats" class="text-xs text-gray-500"></span>
+                    <div class="field flex items-center gap-2 px-3 py-1.5">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" class="text-gray-500"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                        <input type="text" id="history-search" placeholder="Buscar por # o ítem..."
+                               class="bg-transparent text-sm focus:outline-none w-44" oninput="renderHistory()">
+                    </div>
+                </div>
+            </div>
             <div id="history-list" class="space-y-3">
                 <p class="text-gray-500 text-center py-8">No hay invoices generados aún.</p>
             </div>
@@ -249,8 +373,8 @@
                     <p class="text-xs text-gray-500 mb-3">Solo se importarán ítems del CSV que coincidan con estos PO.</p>
                     <div id="po-list" class="flex flex-wrap gap-2 mb-3"></div>
                     <div class="flex gap-2">
-                        <input type="text" id="new-po" placeholder="Nuevo PO..." 
-                               class="flex-1 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                        <input type="text" id="new-po" placeholder="Nuevo PO..."
+                               class="field flex-1 px-3 py-2 text-sm"
                                onkeydown="if(event.key==='Enter')addPO()">
                         <button onclick="addPO()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">+ Agregar</button>
                     </div>
@@ -261,8 +385,8 @@
                     <h3 class="text-sm font-semibold text-gray-300 mb-1">Contador de Invoice</h3>
                     <p class="text-xs text-gray-500 mb-3">El próximo invoice generado usará el número siguiente a este valor.</p>
                     <div class="flex gap-2 items-center">
-                        <input type="number" id="invoice-counter" min="1" 
-                               class="w-32 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-400"
+                        <input type="number" id="invoice-counter" min="1"
+                               class="field w-32 px-3 py-2 text-sm font-mono"
                                onkeydown="if(event.key==='Enter')saveInvoiceCounter()">
                         <button onclick="saveInvoiceCounter()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
                         <span id="counter-status" class="text-xs text-gray-500"></span>
@@ -275,7 +399,7 @@
                     <p class="text-xs text-gray-500 mb-3">Los invoices/especiales generados se enviarán automáticamente a este email.</p>
                     <div class="flex gap-2 items-center">
                         <input type="email" id="email-config" placeholder="usuario@ejemplo.com"
-                               class="flex-1 bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400"
+                               class="field flex-1 px-3 py-2 text-sm"
                                onkeydown="if(event.key==='Enter')saveEmailConfig()">
                         <button onclick="saveEmailConfig()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
                     </div>
@@ -293,13 +417,13 @@
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">API Key</label>
                             <input type="password" id="resend-api-key" placeholder="SG.xxxxxxxxxxxx"
-                                   class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                                   class="field w-full px-3 py-2 text-sm">
                             <span id="resend-key-status" class="text-xs text-gray-500 mt-1 block"></span>
                         </div>
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">Email remitente (From)</label>
                             <input type="text" id="resend-from" placeholder="zerointerllc@gmail.com"
-                                   class="w-full bg-gray-700/80 border border-gray-600 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-400">
+                                   class="field w-full px-3 py-2 text-sm">
                             <span class="text-xs text-gray-500 mt-1 block">Tiene que ser el mismo email que verificaste en SendGrid.</span>
                         </div>
                         <div class="flex items-center gap-3 flex-wrap">
@@ -318,6 +442,7 @@
     let allItems = [];
     let boxItems = new Map(); // id -> {item, qty}
     let boxSortable = null;
+    let allInvoices = [];
 
     // ─── PO Config ──────────────────────────────────────────────────────
     const DEFAULT_POS = ['9999', '99999'];
@@ -327,7 +452,6 @@
     }
     function saveAcceptedPOs(pos) {
         localStorage.setItem('acceptedPOs', JSON.stringify(pos));
-        // Sync to backend
         fetch('/api/config/po', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({pos}) });
     }
     function renderPOs() {
@@ -504,10 +628,14 @@
 
     // ─── Toast ──────────────────────────────────────────────────────────
     function toast(msg, type = 'info') {
-        const colors = { info: 'bg-blue-500', success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500' };
+        const icons = { info: 'ℹ️', success: '✅', error: '⚠️', warning: '⚠️' };
+        const colors = {
+            info: 'border-blue-400/40', success: 'border-green-400/40',
+            error: 'border-red-400/40', warning: 'border-yellow-400/40'
+        };
         const div = document.createElement('div');
-        div.className = `toast ${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
-        div.textContent = msg;
+        div.className = `toast card border ${colors[type] || colors.info} px-4 py-2.5 rounded-lg shadow-xl text-sm max-w-sm`;
+        div.innerHTML = `<span>${icons[type] || icons.info}</span><span>${escHtml(msg)}</span>`;
         document.getElementById('toasts').appendChild(div);
         setTimeout(() => div.remove(), 3000);
     }
@@ -557,52 +685,116 @@
     }
 
     function filterItems() {
+        const search = document.getElementById('search-items').value;
+        document.getElementById('search-clear').classList.toggle('hidden', !search);
         renderItems();
+    }
+
+    function clearSearch() {
+        document.getElementById('search-items').value = '';
+        filterItems();
+    }
+
+    function setStatusFilter(status) {
+        document.getElementById('filter-status').value = status;
+        renderItems();
+    }
+
+    function fmtMoney(n) {
+        return '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function parseItemDate(d) {
+        // expects dd/mm/yyyy
+        if (!d) return 0;
+        const parts = d.split('/');
+        if (parts.length !== 3) return 0;
+        return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+    }
+
+    function renderStats() {
+        const bar = document.getElementById('stats-bar');
+        if (!bar) return;
+        const statusFilter = document.getElementById('filter-status').value;
+        const sum = arr => arr.reduce((a, i) => a + i.price * i.qty, 0);
+        const pending = allItems.filter(i => i.status === 'pending');
+        const invoiced = allItems.filter(i => i.status === 'invoiced');
+        const sent = allItems.filter(i => i.status === 'sent');
+        const stats = [
+            { key: 'pending',  label: 'Pendientes', icon: '🔵', items: pending,  color: 'text-blue-300' },
+            { key: 'invoiced', label: 'Facturados', icon: '🟡', items: invoiced, color: 'text-yellow-300' },
+            { key: 'sent',     label: 'Enviados',   icon: '🟢', items: sent,     color: 'text-green-300' },
+            { key: 'all',      label: 'Total',      icon: '📦', items: allItems, color: 'text-gray-200' },
+        ];
+        bar.innerHTML = stats.map(s => `
+            <div class="stat-chip ${statusFilter === s.key ? 'active' : ''}" onclick="setStatusFilter('${s.key}')" title="Filtrar: ${s.label}">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-500 font-medium uppercase tracking-wide">${s.icon} ${s.label}</span>
+                    <span class="text-xs ${s.color} font-semibold">${s.items.length}</span>
+                </div>
+                <div class="text-lg font-bold ${s.color} tabular-nums mt-0.5">${fmtMoney(sum(s.items))}</div>
+            </div>
+        `).join('');
     }
 
     function renderItems() {
         const search = document.getElementById('search-items').value.toLowerCase();
         const statusFilter = document.getElementById('filter-status').value;
+        const sortBy = document.getElementById('sort-items')?.value || 'default';
         const list = document.getElementById('items-list');
 
-        // Status counter
-        const pendingCount = allItems.filter(i => i.status === 'pending').length;
-        const invoicedCount = allItems.filter(i => i.status === 'invoiced').length;
-        const sentCount = allItems.filter(i => i.status === 'sent').length;
-        const counterEl = document.getElementById('status-counter');
-        if (counterEl) {
-            counterEl.innerHTML = `<span>🔵 ${pendingCount} pendientes</span><span>🟡 ${invoicedCount} facturados</span><span>🟢 ${sentCount} enviados</span>`;
-        }
+        renderStats();
 
-        const filtered = allItems.filter(item => {
+        let filtered = allItems.filter(item => {
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
-            if (search && !item.title.toLowerCase().includes(search) && 
+            if (search && !item.title.toLowerCase().includes(search) &&
                 !item.order_id.toLowerCase().includes(search) &&
+                !(item.tracking && item.tracking.toLowerCase().includes(search)) &&
                 !(item.asin && item.asin.toLowerCase().includes(search))) return false;
             return true;
         });
 
+        const sorters = {
+            date_desc:  (a, b) => parseItemDate(b.order_date) - parseItemDate(a.order_date),
+            date_asc:   (a, b) => parseItemDate(a.order_date) - parseItemDate(b.order_date),
+            price_desc: (a, b) => (b.price * b.qty) - (a.price * a.qty),
+            price_asc:  (a, b) => (a.price * a.qty) - (b.price * b.qty),
+            title_asc:  (a, b) => a.title.localeCompare(b.title),
+        };
+        if (sorters[sortBy]) filtered = [...filtered].sort(sorters[sortBy]);
+
+        const countEl = document.getElementById('filtered-count');
+        if (countEl) {
+            const totalVal = filtered.reduce((a, i) => a + i.price * i.qty, 0);
+            countEl.textContent = filtered.length ? `${filtered.length} ítem${filtered.length !== 1 ? 's' : ''} · ${fmtMoney(totalVal)}` : '';
+        }
+
         if (filtered.length === 0) {
             list.innerHTML = `<div class="text-center py-12">
                 <div class="text-5xl mb-3 opacity-50">📦</div>
-                <p class="text-gray-500">No hay ítems cargados</p>
-                <p class="text-gray-600 text-sm mt-1">Subí un CSV de Amazon Business para empezar</p>
+                <p class="text-gray-500">${search || statusFilter !== 'all' ? 'Sin resultados para este filtro' : 'No hay ítems cargados'}</p>
+                <p class="text-gray-600 text-sm mt-1">${search || statusFilter !== 'all' ? 'Probá cambiar la búsqueda o el filtro' : 'Subí un CSV de Amazon Business para empezar'}</p>
             </div>`;
             return;
         }
 
+        const copyIcon = `<svg class="copy-ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+
         list.innerHTML = filtered.map(item => {
             const isUsed = item.status !== 'pending';
             const inBox = boxItems.has(item.id);
-            const total = (item.price * item.qty).toFixed(2);
+            const total = item.price * item.qty;
             const trackingDisplay = item.tracking || item.order_id || '—';
+            const stClass = item.status === 'invoiced' ? 'st-invoiced' : item.status === 'sent' ? 'st-sent' : '';
             return `
-                <div class="card card-hover p-4 ${isUsed ? 'used-item' : ''} ${inBox ? 'border-blue-400/50' : ''}" 
+                <div class="card card-hover item-card p-4 ${stClass} ${isUsed ? 'used-item' : ''} ${inBox ? 'border-blue-400/50' : ''}"
                      data-id="${item.id}" ${!isUsed && !inBox ? 'draggable="true"' : ''}>
                     <!-- Row 1: Title + Price -->
                     <div class="flex justify-between items-start gap-3">
-                        <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title" title="${escHtml(item.title)}">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}</p>
-                        <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">$${total}</span>
+                        <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title copyable"
+                           title="Click para copiar el título completo"
+                           onclick="copyItemField(${item.id}, 'title', this)">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}${copyIcon}</p>
+                        <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">${fmtMoney(total)}</span>
                     </div>
                     <!-- Row 2: Metadata grid -->
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2.5 text-xs">
@@ -612,7 +804,8 @@
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Tracking</span>
-                            <p class="text-gray-300 font-mono truncate cursor-pointer hover:text-blue-400 transition-colors" title="Click para copiar: ${escHtml(trackingDisplay)}" onclick="copyTracking('${escHtml(trackingDisplay)}')">${escHtml(trackingDisplay.substring(0, 20))}</p>
+                            <p class="text-gray-300 font-mono truncate copyable" title="Click para copiar: ${escHtml(trackingDisplay)}"
+                               onclick="copyItemField(${item.id}, 'tracking', this)">${escHtml(trackingDisplay.substring(0, 20))}${copyIcon}</p>
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Fecha</span>
@@ -620,23 +813,29 @@
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">ASIN</span>
-                            <p class="text-blue-400 font-mono cursor-pointer hover:text-blue-300 transition-colors" title="Click para copiar: ${escHtml(item.asin || '')}" onclick="copyTracking('${escHtml(item.asin || '')}')">${item.asin || '—'}</p>
+                            <p class="text-blue-400 font-mono flex items-center gap-1">
+                                ${item.asin ? `<span class="copyable" title="Click para copiar: ${escHtml(item.asin)}" onclick="copyItemField(${item.id}, 'asin', this)">${escHtml(item.asin)}${copyIcon}</span>
+                                <a href="https://www.amazon.com/dp/${encodeURIComponent(item.asin)}" target="_blank" rel="noopener" title="Ver en Amazon" class="text-gray-500 hover:text-orange-300 transition-colors" onclick="event.stopPropagation()">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
+                                </a>` : '—'}
+                            </p>
                         </div>
                     </div>
                     <!-- Row 3: Actions -->
                     <div class="flex items-center justify-between mt-3 pt-2.5" style="border-top: 1px solid rgba(255,255,255,0.06);">
                         <div class="flex items-center gap-2">
-                            <select onchange="changeItemStatus(${item.id}, this.value)" 
-                                    class="text-xs bg-gray-700/80 border border-gray-600 rounded-md px-2 py-1 focus:outline-none focus:border-blue-400 cursor-pointer">
+                            <select onchange="changeItemStatus(${item.id}, this.value)"
+                                    class="field text-xs px-2 py-1 cursor-pointer">
                                 <option value="pending" ${item.status === 'pending' ? 'selected' : ''}>⏳ Pendiente</option>
                                 <option value="invoiced" ${item.status === 'invoiced' ? 'selected' : ''}>📄 Facturado${item.invoice_number ? ' #'+item.invoice_number : ''}</option>
                                 <option value="sent" ${item.status === 'sent' ? 'selected' : ''}>✈️ Enviado</option>
                             </select>
-                            ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300 text-xs px-2 py-0.5 rounded">Multi</span>' : ''}
+                            ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
                         </div>
                         <div class="flex items-center gap-2">
                             ${!isUsed && !inBox ? `<button onclick="addToBox(${item.id})" class="text-xs btn-primary px-3 py-1.5 rounded-md font-medium">+ Agregar</button>` : ''}
-                            <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g, "\\'")}')" class="text-xs text-red-400/60 hover:text-red-300 hover:bg-red-400/10 rounded p-1.5 transition-colors" title="Eliminar">🗑️</button>
+                            ${inBox ? `<span class="badge bg-blue-500/20 text-blue-300">En caja ✓</span>` : ''}
+                            <button onclick="deleteItem(${item.id})" class="text-xs text-red-400/60 hover:text-red-300 hover:bg-red-400/10 rounded p-1.5 transition-colors" title="Eliminar">🗑️</button>
                         </div>
                     </div>
                 </div>
@@ -705,11 +904,13 @@
         const box = document.getElementById('invoice-box');
         const genBtn = document.getElementById('generate-btn');
         const remitoBtn = document.getElementById('remito-btn');
+        const breakdown = document.getElementById('box-breakdown');
 
         if (boxItems.size === 0) {
             box.innerHTML = '<p class="text-gray-500 text-center py-8 empty-msg">Arrastrá ítems acá para armar un invoice</p>';
             document.getElementById('box-total').textContent = '$0.00';
             document.getElementById('box-count').textContent = '0 ítems';
+            breakdown.classList.add('hidden');
             genBtn.disabled = true;
             remitoBtn.disabled = true;
             return;
@@ -717,11 +918,13 @@
 
         const discount = getDiscount();
         let total = 0;
+        let subtotal = 0;
         const html = [];
         for (const [id, { item, qty }] of boxItems) {
             const discountedPrice = discount > 0 ? Math.round(item.price * (1 - discount / 100) * 10) / 10 : item.price;
             const amount = discountedPrice * qty;
             total += amount;
+            subtotal += item.price * qty;
             const priceDisplay = discount > 0
                 ? `<span class="text-gray-500 line-through text-xs">$${item.price.toFixed(2)}</span> <span class="text-yellow-300">$${discountedPrice.toFixed(1)}</span>`
                 : `$${item.price.toFixed(2)}`;
@@ -729,21 +932,29 @@
                 <div class="card p-2.5 flex items-center gap-2 hover:border-blue-400/30 transition-all duration-200" data-box-id="${id}">
                     <span class="drag-handle cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300 px-1">⠿</span>
                     <div class="flex-1 min-w-0">
-                        <p class="text-xs truncate">${escHtml(item.title.substring(0, 60))}</p>
+                        <p class="text-xs truncate copyable" title="Click para copiar el título" onclick="copyItemField(${id}, 'title', this)">${escHtml(item.title.substring(0, 60))}</p>
                         <span class="text-xs text-gray-400">${priceDisplay}</span>
                     </div>
-                    <input type="number" value="${qty}" min="1" 
-                           class="w-14 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                    <input type="number" value="${qty}" min="1"
+                           class="field w-14 px-2 py-1 text-xs text-center"
                            onchange="updateBoxQty(${id}, this.value)">
-                    <span class="text-sm font-semibold text-green-400 w-20 text-right">$${amount.toFixed(2)}</span>
+                    <span class="text-sm font-semibold text-green-400 w-20 text-right tabular-nums">$${amount.toFixed(2)}</span>
                     <button onclick="removeFromBox(${id})" class="text-red-400 hover:text-red-300 text-lg px-1">×</button>
                 </div>
             `);
         }
 
         box.innerHTML = html.join('');
-        document.getElementById('box-total').textContent = `$${total.toFixed(2)}`;
+        document.getElementById('box-total').textContent = fmtMoney(total);
         document.getElementById('box-count').textContent = `${boxItems.size} ítems`;
+        if (discount > 0) {
+            breakdown.classList.remove('hidden');
+            document.getElementById('box-subtotal').textContent = fmtMoney(subtotal);
+            document.getElementById('box-disc-pct').textContent = discount;
+            document.getElementById('box-disc-amount').textContent = '-' + fmtMoney(subtotal - total);
+        } else {
+            breakdown.classList.add('hidden');
+        }
         genBtn.disabled = false;
         remitoBtn.disabled = false;
         initSortable();
@@ -771,7 +982,6 @@
             totalAmount += item.price * qty;
         }
 
-        // Confirmation dialog
         const confirmed = window.confirm(
             `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`
         );
@@ -891,59 +1101,80 @@
     async function loadHistory() {
         try {
             const res = await fetch('/api/invoices');
-            const invoices = await res.json();
-            const list = document.getElementById('history-list');
-
-            if (invoices.length === 0) {
-                list.innerHTML = `<div class="text-center py-12">
-                    <div class="text-5xl mb-3 opacity-50">📋</div>
-                    <p class="text-gray-500">No hay invoices generados aún</p>
-                    <p class="text-gray-600 text-sm mt-1">Generá uno desde la pestaña de Ítems</p>
-                </div>`;
-                return;
-            }
-
-            list.innerHTML = invoices.map(inv => {
-                const isRemito = inv.type === 'remito';
-                const typeBadge = isRemito 
-                    ? '<span class="badge bg-orange-500/20 text-orange-300 ml-2">Especial</span>'
-                    : '<span class="badge bg-blue-500/20 text-blue-300 ml-2">Invoice</span>';
-                const label = isRemito ? 'Especial' : 'Invoice';
-                return `
-                <div class="card p-4">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <h3 class="text-lg font-semibold">
-                                ${label} #${inv.invoice_number}
-                                ${typeBadge}
-                                ${inv.all_sent ? '<span class="badge bg-green-500/20 text-green-300 ml-2">Enviado</span>' : '<span class="badge bg-yellow-500/20 text-yellow-300 ml-2">Pendiente</span>'}
-                            </h3>
-                            <p class="text-sm text-gray-400 mt-1">
-                                📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 $${inv.total.toFixed(2)}
-                            </p>
-                        </div>
-                        <div class="flex gap-2 flex-wrap">
-                            <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
-                            <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
-                            ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
-                        </div>
-                    </div>
-                    <details class="mt-3">
-                        <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems</summary>
-                        <div class="mt-2 space-y-1">
-                            ${inv.items.map(i => `
-                                <div class="text-xs text-gray-400 flex justify-between">
-                                    <span class="truncate max-w-sm">${escHtml(i.title.substring(0, 60))}</span>
-                                    <span>${i.qty} × $${i.price.toFixed(2)}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </details>
-                </div>
-            `}).join('');
+            allInvoices = await res.json();
+            renderHistory();
         } catch (err) {
             toast('Error al cargar historial', 'error');
         }
+    }
+
+    function renderHistory() {
+        const list = document.getElementById('history-list');
+        const search = (document.getElementById('history-search')?.value || '').toLowerCase();
+        const statsEl = document.getElementById('history-stats');
+
+        let invoices = allInvoices;
+        if (search) {
+            invoices = allInvoices.filter(inv =>
+                String(inv.invoice_number).includes(search) ||
+                (inv.items || []).some(i => i.title.toLowerCase().includes(search))
+            );
+        }
+
+        if (statsEl) {
+            const totalAll = allInvoices.reduce((a, inv) => a + (inv.total || 0), 0);
+            statsEl.textContent = allInvoices.length
+                ? `${allInvoices.length} documento${allInvoices.length !== 1 ? 's' : ''} · ${fmtMoney(totalAll)} total`
+                : '';
+        }
+
+        if (invoices.length === 0) {
+            list.innerHTML = `<div class="text-center py-12">
+                <div class="text-5xl mb-3 opacity-50">📋</div>
+                <p class="text-gray-500">${search ? 'Sin resultados para esta búsqueda' : 'No hay invoices generados aún'}</p>
+                <p class="text-gray-600 text-sm mt-1">${search ? 'Probá con otro término' : 'Generá uno desde la pestaña de Ítems'}</p>
+            </div>`;
+            return;
+        }
+
+        list.innerHTML = invoices.map(inv => {
+            const isRemito = inv.type === 'remito';
+            const typeBadge = isRemito
+                ? '<span class="badge bg-orange-500/20 text-orange-300 ml-2">Especial</span>'
+                : '<span class="badge bg-blue-500/20 text-blue-300 ml-2">Invoice</span>';
+            const label = isRemito ? 'Especial' : 'Invoice';
+            return `
+            <div class="card card-hover p-4">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <h3 class="text-lg font-semibold">
+                            ${label} #${inv.invoice_number}
+                            ${typeBadge}
+                            ${inv.all_sent ? '<span class="badge bg-green-500/20 text-green-300 ml-2">Enviado</span>' : '<span class="badge bg-yellow-500/20 text-yellow-300 ml-2">Pendiente</span>'}
+                        </h3>
+                        <p class="text-sm text-gray-400 mt-1">
+                            📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 <span class="text-green-400 font-semibold">${fmtMoney(inv.total)}</span>
+                        </p>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
+                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
+                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
+                    </div>
+                </div>
+                <details class="mt-3">
+                    <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems (${inv.items_count})</summary>
+                    <div class="mt-2 space-y-1">
+                        ${inv.items.map(i => `
+                            <div class="text-xs text-gray-400 flex justify-between gap-2">
+                                <span class="truncate max-w-sm copyable" title="Click para copiar" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>
+                                <span class="shrink-0 tabular-nums">${i.qty} × $${i.price.toFixed(2)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </details>
+            </div>
+        `}).join('');
     }
 
     async function downloadDoc(id, type) {
@@ -975,28 +1206,45 @@
         }
     }
 
-    // ─── Copy Tracking ──────────────────────────────────────────────────
-    function copyTracking(text) {
-        navigator.clipboard.writeText(text).then(() => {
-            const toast = document.createElement('div');
-            toast.textContent = '✅ Tracking copiado!';
-            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm font-medium';
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        }).catch(() => {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            const toast = document.createElement('div');
-            toast.textContent = '✅ Tracking copiado!';
-            toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 text-sm font-medium';
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        });
+    // ─── Copy helpers ───────────────────────────────────────────────────
+    function copyText(text, label = 'Texto') {
+        if (!text || text === '—') return;
+        const done = () => toast(`${label} copiado al portapapeles`, 'success');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+        } else {
+            fallbackCopy(text, done);
+        }
     }
+
+    function fallbackCopy(text, done) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch(e) {}
+        document.body.removeChild(ta);
+    }
+
+    function copyItemField(itemId, field, el) {
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) return;
+        const labels = { title: 'Título', tracking: 'Tracking', asin: 'ASIN' };
+        let value;
+        if (field === 'title') value = item.title;
+        else if (field === 'tracking') value = item.tracking || item.order_id || '';
+        else if (field === 'asin') value = item.asin || '';
+        if (!value) return;
+        copyText(value, labels[field] || 'Texto');
+        if (el) {
+            el.classList.add('copied');
+            setTimeout(() => el.classList.remove('copied'), 900);
+        }
+    }
+
+    // Backwards-compatible alias
+    function copyTracking(text) { copyText(text, 'Tracking'); }
 
     // ─── Item Status ────────────────────────────────────────────────────
     async function changeItemStatus(itemId, newStatus) {
@@ -1008,7 +1256,8 @@
             });
             const data = await res.json();
             if (res.ok) {
-                toast(`Estado actualizado a "${newStatus}"`, 'success');
+                const statusLabels = { pending: 'Pendiente', invoiced: 'Facturado', sent: 'Enviado' };
+                toast(`Estado actualizado a "${statusLabels[newStatus] || newStatus}"`, 'success');
                 loadItems();
             } else {
                 toast(data.error || 'Error al cambiar estado', 'error');
@@ -1020,17 +1269,31 @@
 
     // ─── Helpers ────────────────────────────────────────────────────────
     function escHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    function escAttr(str) {
+        // for use inside single-quoted JS strings within HTML attributes
+        return String(str == null ? '' : str)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     // ─── Delete Item Modal ──────────────────────────────────────────────
     let deleteItemId = null;
 
-    function deleteItem(id, title) {
+    function deleteItem(id) {
         deleteItemId = id;
-        document.getElementById('delete-modal-text').textContent = `"${title}..."`;
+        const item = allItems.find(i => i.id === id);
+        const title = item ? item.title.substring(0, 60) : '';
+        document.getElementById('delete-modal-text').textContent = `"${title}${item && item.title.length > 60 ? '...' : ''}"`;
         const modal = document.getElementById('delete-modal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1049,7 +1312,6 @@
         const idToDelete = deleteItemId;
         closeDeleteModal();
         try {
-            // Remove from UI immediately
             allItems = allItems.filter(i => i.id !== idToDelete);
             boxItems.delete(idToDelete);
             renderItems();
@@ -1061,11 +1323,11 @@
             } else {
                 const data = await res.json();
                 toast(data.error || 'Error al eliminar', 'error');
-                loadItems(); // reload on error to restore
+                loadItems();
             }
         } catch (err) {
             toast('Error: ' + err.message, 'error');
-            loadItems(); // reload on error to restore
+            loadItems();
         }
     }
 
@@ -1079,7 +1341,6 @@
             chosenClass: 'sortable-chosen',
             handle: '.drag-handle',
             onEnd: function(evt) {
-                // Reorder boxItems Map to match DOM order
                 const newOrder = new Map();
                 box.querySelectorAll('[data-box-id]').forEach(el => {
                     const id = parseInt(el.dataset.boxId);
@@ -1142,14 +1403,14 @@
                     <div class="flex-1 min-w-0">
                         <p class="text-xs font-semibold leading-snug">${escHtml(item.title.substring(0, 80))}${item.title.length > 80 ? '...' : ''}</p>
                         <p class="text-xs text-gray-400 mt-0.5">$${item.price.toFixed(2)} × ${item.qty} = <span class="text-green-400 font-semibold">$${total}</span>
-                            <span class="ml-2 text-gray-500 font-mono">${item.tracking || item.order_id}</span>
+                            <span class="ml-2 text-gray-500 font-mono">${escHtml(item.tracking || item.order_id || '')}</span>
                         </p>
                     </div>
                     ${isChecked ? `
                     <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
                         <label class="text-xs text-gray-500">Qty:</label>
                         <input type="number" value="${qty}" min="1"
-                               class="w-14 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                               class="field w-14 px-2 py-1 text-xs text-center"
                                onchange="updateAddItemQty(${item.id}, this.value)">
                     </div>` : ''}
                 </div>
@@ -1244,9 +1505,24 @@
         }
     }
 
+    // ─── Keyboard shortcuts ─────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            closeDeleteModal();
+            closeAddItemsModal();
+            return;
+        }
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (e.key === '/') {
+            e.preventDefault();
+            showTab('items');
+            document.getElementById('search-items')?.focus();
+        }
+    });
+
     // ─── Init ───────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
-        // Sync PO config from backend
         try {
             const res = await fetch('/api/config/po');
             const data = await res.json();
@@ -1260,21 +1536,18 @@
     // Register Service Worker with update detection
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then(reg => {
-        // Check for updates every 60 seconds
         setInterval(() => reg.update(), 60000);
 
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // New version available — show update banner
               showUpdateBanner(newWorker);
             }
           });
         });
       }).catch(() => {});
 
-      // Reload when the new SW takes over
       let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) {
@@ -1285,7 +1558,6 @@
     }
 
     function showUpdateBanner(worker) {
-      // Remove existing banner if any
       const old = document.getElementById('update-banner');
       if (old) old.remove();
 

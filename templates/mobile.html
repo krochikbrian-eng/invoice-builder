@@ -485,10 +485,14 @@
 
 <script>
 // ─── Copy Tracking ────────────────────────────────────────────────────────
-function copyTracking(text) {
+function copyItemTitle(itemId) {
+    const item = allItems.find(i => i.id === itemId);
+    if (item && item.title) copyTracking(item.title, 'Título');
+}
+function copyTracking(text, label = 'Tracking') {
     navigator.clipboard.writeText(text).then(() => {
         const t = document.createElement('div');
-        t.textContent = '✅ Tracking copiado!';
+        t.textContent = `✅ ${label} copiado!`;
         t.style.cssText = 'position:fixed;bottom:1rem;right:1rem;background:#16a34a;color:#fff;padding:0.5rem 1rem;border-radius:0.5rem;box-shadow:0 4px 6px rgba(0,0,0,0.3);z-index:9999;font-size:0.875rem;font-weight:500;';
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 2000);
@@ -500,7 +504,7 @@ function copyTracking(text) {
         document.execCommand('copy');
         document.body.removeChild(ta);
         const t = document.createElement('div');
-        t.textContent = '✅ Tracking copiado!';
+        t.textContent = `✅ ${label} copiado!`;
         t.style.cssText = 'position:fixed;bottom:1rem;right:1rem;background:#16a34a;color:#fff;padding:0.5rem 1rem;border-radius:0.5rem;box-shadow:0 4px 6px rgba(0,0,0,0.3);z-index:9999;font-size:0.875rem;font-weight:500;';
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 2000);
@@ -792,7 +796,7 @@ function renderItems() {
         return `<div class="card card-hover item-card ${isUsed ? 'used-item' : ''} ${inBox ? 'in-box-item' : ''}" data-id="${item.id}">
             <!-- Title + Price row -->
             <div class="flex justify-between items-start gap-3 mb-2">
-                <p class="item-title flex-1">${escHtml(item.title.substring(0, 100))}${item.title.length > 100 ? '…' : ''}</p>
+                <p class="item-title flex-1" style="cursor:pointer;" title="Tocar para copiar el título" onclick="copyItemTitle(${item.id})">${escHtml(item.title.substring(0, 100))}${item.title.length > 100 ? '…' : ''}</p>
                 <span class="item-price shrink-0">$${total}</span>
             </div>
 
