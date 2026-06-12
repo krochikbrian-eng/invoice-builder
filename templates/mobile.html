@@ -282,8 +282,7 @@
     <section id="tab-items" class="tab-content">
         <div class="pt-4 pb-2">
             <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-bold">📦 Ítems</h2>
-                <div id="status-counter" class="text-xs" style="color:#585b70;"></div>
+                <h2 class="text-base font-bold">📦 Ítems Disponibles <span id="pending-count" style="color:#89b4fa;"></span></h2>
             </div>
 
             <!-- Search + filter -->
@@ -304,74 +303,6 @@
                     <p class="text-xs mt-1" style="color:#45475a;">Subí un CSV en la pestaña ↓</p>
                 </div>
             </div>
-        </div>
-    </section>
-
-    <!-- ── Invoice Box Tab ── -->
-    <section id="tab-box" class="tab-content">
-        <div class="pt-4 pb-4">
-
-            <!-- Header: title + secondary limpiar button -->
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-bold">📋 Caja de Invoice</h2>
-                <button onclick="clearBox()"
-                        class="text-xs px-3 py-1 rounded-lg"
-                        style="color:#585b70; background:rgba(88,91,112,0.12); min-height:32px; border:1px solid #313244;">
-                    Limpiar
-                </button>
-            </div>
-
-            <!-- Box items list -->
-            <div id="box-list">
-                <div class="empty-state">
-                    <div class="icon">🛒</div>
-                    <p>La caja está vacía</p>
-                    <p class="text-xs mt-1" style="color:#45475a;">Agrega ítems desde la pestaña 📦</p>
-                </div>
-            </div>
-
-            <!-- Summary (3-column grid) -->
-            <div id="box-summary" class="card p-4 mt-2 mb-2 hidden">
-                <!-- Discount input -->
-                <div class="flex items-center gap-2 mb-3 pb-3" style="border-bottom:1px solid #313244; flex-wrap:nowrap;">
-                    <span style="font-size:0.8rem; color:#a6adc8; white-space:nowrap;">Descuento:</span>
-                    <input type="number" id="discount-input" value="0" min="0" max="100" step="0.1"
-                           style="width:56px; flex:none; background:rgba(49,50,68,0.8); border:1px solid #45475a; border-radius:6px; color:#cdd6f4; text-align:center; padding:4px; font-size:0.85rem; min-height:36px;"
-                           oninput="renderBox()">
-                    <span style="font-size:0.8rem; color:#a6adc8; white-space:nowrap;">%</span>
-                </div>
-                <div class="box-summary-grid">
-                    <div class="box-summary-cell">
-                        <p>Total</p>
-                        <p id="box-total" style="color:#a6e3a1; font-size:1.05rem;">$0.00</p>
-                    </div>
-                    <div class="box-summary-cell">
-                        <p>Ítems</p>
-                        <p id="box-count" style="font-size:1.05rem;">0</p>
-                    </div>
-                    <div class="box-summary-cell">
-                        <p>Próximo #</p>
-                        <p id="next-inv-num-box" style="color:#f9e2af; font-family:monospace; font-size:0.95rem;">—</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Action buttons — inline, no fixed positioning -->
-            <div id="box-actions" class="mt-3 hidden">
-                <div class="flex gap-3">
-                    <button onclick="generateInvoice()" id="generate-btn"
-                            class="btn-primary flex-1 rounded-xl text-sm py-3 disabled:opacity-40"
-                            disabled>
-                        ⚡ Generar Invoice
-                    </button>
-                    <button onclick="generateRemito()" id="remito-btn"
-                            class="btn-orange flex-1 rounded-xl text-sm py-3 disabled:opacity-40"
-                            disabled>
-                        📄 Especial
-                    </button>
-                </div>
-            </div>
-
         </div>
     </section>
 
@@ -466,11 +397,6 @@
         <button class="tab-btn-nav" data-tab="items" onclick="showTab('items')">
             <span class="icon">📦</span>
             <span>Ítems</span>
-        </button>
-        <button class="tab-btn-nav" data-tab="box" onclick="showTab('box')" style="position:relative;">
-            <span class="icon">🛒</span>
-            <span>Caja</span>
-            <span id="box-badge" class="box-badge hidden">0</span>
         </button>
         <button class="tab-btn-nav" data-tab="history" onclick="showTab('history')">
             <span class="icon">📋</span>
@@ -686,6 +612,7 @@ function toggleSmtp() {
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 function showTab(name) {
+    if (!document.getElementById(`tab-${name}`)) name = 'items';
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${name}`).classList.add('active');
     document.querySelectorAll('.tab-btn-nav').forEach(btn => {
@@ -762,14 +689,10 @@ function renderItems() {
     const statusFilter = document.getElementById('filter-status').value;
     const list = document.getElementById('items-list');
 
-    // Status counter
+    // Pending counter in title
     const pendingCount = allItems.filter(i => i.status === 'pending').length;
-    const invoicedCount = allItems.filter(i => i.status === 'invoiced').length;
-    const sentCount = allItems.filter(i => i.status === 'sent').length;
-    const counterEl = document.getElementById('status-counter');
-    if (counterEl) {
-        counterEl.innerHTML = `🔵${pendingCount} · 🟡${invoicedCount} · 🟢${sentCount}`;
-    }
+    const counterEl = document.getElementById('pending-count');
+    if (counterEl) counterEl.textContent = `(${pendingCount})`;
 
     const filtered = allItems.filter(item => {
         if (statusFilter !== 'all' && item.status !== statusFilter) return false;
@@ -817,8 +740,6 @@ function renderItems() {
                     <option value="sent" ${item.status==='sent'?'selected':''}>✈️ Enviado</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
-                    ${!isUsed && !inBox ? `<button onclick="addToBox(${item.id})" class="add-btn">+ Agregar</button>` : ''}
-                    ${inBox ? `<span class="badge" style="background:rgba(137,180,250,0.15);color:#89b4fa;">En caja</span>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>
@@ -866,6 +787,7 @@ function clearBox() {
 }
 function updateBoxBadge() {
     const badge = document.getElementById('box-badge');
+    if (!badge) return;
     if (boxItems.size > 0) {
         badge.textContent = boxItems.size;
         badge.classList.remove('hidden');
@@ -876,6 +798,7 @@ function updateBoxBadge() {
 
 function renderBox() {
     const boxList = document.getElementById('box-list');
+    if (!boxList) return;
     const summary = document.getElementById('box-summary');
     const boxActions = document.getElementById('box-actions');
     const genBtn = document.getElementById('generate-btn');
