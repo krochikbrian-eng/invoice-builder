@@ -65,16 +65,11 @@ def _get_sendgrid_from(cfg):
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None):
     cfg = load_config()
-    smtp_cfg = cfg.get('smtp', {})
-    smtp_ready = bool(smtp_cfg.get('user')) and bool(smtp_cfg.get('password'))
     sg_key = _get_sendgrid_key()
-    # Preferir Gmail SMTP cuando esté configurado; usar SendGrid solo como respaldo.
-    if smtp_ready:
-        _send_via_smtp(cfg, files, to_email, subject, body, zip_data, zip_filename)
-    elif sg_key:
+    if sg_key:
         _send_via_sendgrid(sg_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
     else:
-        raise ValueError("No hay proveedor de email configurado (ni SMTP ni SendGrid)")
+        _send_via_smtp(cfg, files, to_email, subject, body, zip_data, zip_filename)
 
 def _send_via_sendgrid(api_key: str, cfg: dict, files: list, to_email: str,
                        subject: str, body: str, zip_data=None, zip_filename=None):
