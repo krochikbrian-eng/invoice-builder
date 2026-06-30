@@ -234,6 +234,18 @@
     </div>
 </div>
 
+<!-- Generic confirmation modal -->
+<div id="confirm-modal" class="modal-overlay" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
+    <div class="card p-5 w-full max-w-sm">
+        <h3 id="confirm-modal-title" class="font-bold text-base mb-2">¿Confirmar?</h3>
+        <p id="confirm-modal-text" class="text-sm text-gray-400 mb-5" style="white-space:pre-line;"></p>
+        <div class="flex gap-3">
+            <button id="confirm-modal-cancel" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
+            <button id="confirm-modal-ok" class="flex-1 btn-primary py-3 rounded-xl text-sm">Aceptar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Mobile Header -->
 <header class="mobile-header">
     <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
@@ -642,6 +654,28 @@ function toast(msg, type = 'info') {
     setTimeout(() => div.remove(), 3000);
 }
 
+// ─── Confirm dialog (estilo del sistema) ────────────────────────────────────
+function confirmDialog({ title = '¿Confirmar?', message = '', confirmText = 'Aceptar', cancelText = 'Cancelar', icon = '' } = {}) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        document.getElementById('confirm-modal-title').textContent = (icon ? icon + ' ' : '') + title;
+        document.getElementById('confirm-modal-text').textContent = message;
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        okBtn.textContent = confirmText;
+        cancelBtn.textContent = cancelText;
+        modal.classList.add('open');
+        const cleanup = (val) => {
+            modal.classList.remove('open');
+            okBtn.onclick = null; cancelBtn.onclick = null; modal._cancel = null;
+            resolve(val);
+        };
+        okBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+        modal._cancel = () => cleanup(false);
+    });
+}
+
 // ─── Upload ───────────────────────────────────────────────────────────────
 function handleDrop(e) {
     e.preventDefault();
@@ -879,9 +913,12 @@ async function generateInvoice() {
         quantities[String(id)] = qty;
         totalAmount += item.price * qty;
     }
-    const confirmed = window.confirm(
-        `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`
-    );
+    const confirmed = await confirmDialog({
+        title: 'Generar invoice',
+        message: `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`,
+        confirmText: '⚡ Generar',
+        icon: '🧾'
+    });
     if (!confirmed) return;
 
     const btn = document.getElementById('generate-btn');
@@ -939,9 +976,12 @@ async function generateRemito() {
         quantities[String(id)] = qty;
         totalAmount += item.price * qty;
     }
-    const confirmed = window.confirm(
-        `¿Generar especial con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nLos ítems se marcarán como facturados.`
-    );
+    const confirmed = await confirmDialog({
+        title: 'Generar especial',
+        message: `¿Generar especial con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nLos ítems se marcarán como facturados.`,
+        confirmText: '⚡ Generar',
+        icon: '📋'
+    });
     if (!confirmed) return;
 
     const btn = document.getElementById('remito-btn');
@@ -1051,7 +1091,13 @@ async function loadHistory() {
 }
 
 async function deleteInvoice(id, number) {
-    if (!confirm(`¿Eliminar Invoice #${number}? Los ítems vuelven a pendientes.`)) return;
+    const confirmed = await confirmDialog({
+        title: `Eliminar Invoice #${number}`,
+        message: `¿Eliminar Invoice #${number}?\n\nLos ítems vuelven a pendientes.`,
+        confirmText: 'Eliminar',
+        icon: '🗑️'
+    });
+    if (!confirmed) return;
     try {
         const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
         if (res.ok) {

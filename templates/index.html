@@ -174,6 +174,18 @@
         </div>
     </div>
 
+    <!-- Generic confirmation modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
+        <div class="card p-6 max-w-md mx-auto anim-in">
+            <h3 id="confirm-modal-title" class="text-lg font-semibold mb-2">¿Confirmar?</h3>
+            <p id="confirm-modal-text" class="text-sm text-gray-400 mb-4" style="white-space:pre-line;"></p>
+            <div class="flex gap-3 justify-end">
+                <button id="confirm-modal-cancel" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
+                <button id="confirm-modal-ok" class="btn-primary px-4 py-2 rounded-lg text-sm">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Items to Invoice modal -->
     <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeAddItemsModal()">
         <div class="card p-6 mx-auto w-full max-w-2xl anim-in" style="max-height:85vh;display:flex;flex-direction:column;">
@@ -653,6 +665,38 @@
         setTimeout(() => div.remove(), 3000);
     }
 
+    // ─── Confirm dialog (estilo del sistema) ────────────────────────────
+    function confirmDialog({ title = '¿Confirmar?', message = '', confirmText = 'Aceptar', cancelText = 'Cancelar', confirmClass = 'btn-primary', icon = '' } = {}) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('confirm-modal');
+            document.getElementById('confirm-modal-title').textContent = (icon ? icon + ' ' : '') + title;
+            document.getElementById('confirm-modal-text').textContent = message;
+            const okBtn = document.getElementById('confirm-modal-ok');
+            const cancelBtn = document.getElementById('confirm-modal-cancel');
+            okBtn.textContent = confirmText;
+            okBtn.className = `${confirmClass} px-4 py-2 rounded-lg text-sm`;
+            cancelBtn.textContent = cancelText;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            const cleanup = (val) => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                okBtn.onclick = null; cancelBtn.onclick = null; modal._cancel = null;
+                document.removeEventListener('keydown', onKey);
+                resolve(val);
+            };
+            const onKey = (e) => {
+                if (e.key === 'Escape') cleanup(false);
+                else if (e.key === 'Enter') cleanup(true);
+            };
+            okBtn.onclick = () => cleanup(true);
+            cancelBtn.onclick = () => cleanup(false);
+            modal._cancel = () => cleanup(false);
+            document.addEventListener('keydown', onKey);
+            okBtn.focus();
+        });
+    }
+
     // ─── Upload ─────────────────────────────────────────────────────────
     function handleDrop(e) {
         e.preventDefault();
@@ -875,7 +919,12 @@
         if (selectedItems.size === 0) return;
         const ids = [...selectedItems];
         const statusLabels = { pending: 'Pendiente', invoiced: 'Facturado', sent: 'Enviado' };
-        const confirmed = window.confirm(`¿Cambiar ${ids.length} ítem(s) a "${statusLabels[newStatus]}"?`);
+        const confirmed = await confirmDialog({
+            title: `Cambiar estado a "${statusLabels[newStatus]}"`,
+            message: `¿Cambiar ${ids.length} ítem(s) a "${statusLabels[newStatus]}"?`,
+            confirmText: 'Cambiar',
+            icon: '🔄'
+        });
         if (!confirmed) return;
         try {
             const results = await Promise.all(ids.map(id =>
@@ -1029,9 +1078,12 @@
             totalAmount += item.price * qty;
         }
 
-        const confirmed = window.confirm(
-            `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`
-        );
+        const confirmed = await confirmDialog({
+            title: 'Generar invoice',
+            message: `¿Generar invoice con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nEsta acción no se puede deshacer.`,
+            confirmText: '⚡ Generar',
+            icon: '🧾'
+        });
         if (!confirmed) return;
 
         const btn = document.getElementById('generate-btn');
@@ -1093,9 +1145,12 @@
             totalAmount += item.price * qty;
         }
 
-        const confirmed = window.confirm(
-            `¿Generar especial con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nLos ítems se marcarán como facturados.`
-        );
+        const confirmed = await confirmDialog({
+            title: 'Generar especial',
+            message: `¿Generar especial con ${boxItems.size} ítem(s) por $${totalAmount.toFixed(2)}?\n\nLos ítems se marcarán como facturados.`,
+            confirmText: '⚡ Generar',
+            icon: '📋'
+        });
         if (!confirmed) return;
 
         const btn = document.getElementById('remito-btn');
@@ -1499,9 +1554,12 @@
 
         const label = addItemsTargetType === 'remito' ? 'Especial' : 'Invoice';
         const discountNote = discount > 0 ? ` con ${discount}% de descuento` : '';
-        const confirmed = window.confirm(
-            `¿Agregar ${items.length} ítem(s) al ${label} #${addItemsTargetNumber}${discountNote}?\n\nSe regenerarán los archivos y se enviará el email actualizado.`
-        );
+        const confirmed = await confirmDialog({
+            title: `Agregar ítems al ${label} #${addItemsTargetNumber}`,
+            message: `¿Agregar ${items.length} ítem(s) al ${label} #${addItemsTargetNumber}${discountNote}?\n\nSe regenerarán los archivos y se enviará el email actualizado.`,
+            confirmText: '⚡ Agregar',
+            icon: '➕'
+        });
         if (!confirmed) return;
 
         const btn = document.getElementById('add-items-confirm-btn');
