@@ -304,6 +304,8 @@
                     <div id="bulk-bar" class="hidden card mb-3 items-center gap-1.5 whitespace-nowrap" style="border-color: rgba(137,180,250,0.4); padding: .5rem .75rem;">
                         <span id="bulk-count" class="text-xs font-bold text-blue-300 shrink-0"></span>
                         <span class="text-gray-600 shrink-0" style="font-size:.7rem;">→</span>
+                        <button onclick="bulkAddToBox()" class="btn-primary px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">📦 Agregar a caja</button>
+                        <span class="text-gray-700 shrink-0" style="font-size:.7rem;">·</span>
                         <button onclick="bulkSetStatus('pending')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">⏳ Pendiente</button>
                         <button onclick="bulkSetStatus('invoiced')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">📄 Facturado</button>
                         <button onclick="bulkSetStatus('sent')" class="btn-ghost px-2.5 py-1 rounded-md font-medium shrink-0" style="font-size:.7rem;">✈️ Enviado</button>
@@ -946,6 +948,31 @@
         } catch (err) {
             toast('Error: ' + err.message, 'error');
         }
+    }
+
+    function bulkAddToBox() {
+        if (selectedItems.size === 0) return;
+        const ids = [...selectedItems];
+        let added = 0, skipped = 0;
+        ids.forEach(id => {
+            const item = allItems.find(i => i.id === id);
+            if (item && item.status === 'pending' && !boxItems.has(id)) {
+                boxItems.set(id, { item, qty: item.qty });
+                added++;
+            } else {
+                skipped++;
+            }
+        });
+        if (added > 0) {
+            renderBox();
+            toast(skipped > 0
+                ? `${added} ítem(s) agregados a la caja · ${skipped} omitidos (no pendientes o ya en caja)`
+                : `${added} ítem(s) agregados a la caja`, 'success');
+        } else {
+            toast('Ningún ítem se pudo agregar (no pendientes o ya en caja)', 'warning');
+        }
+        selectedItems.clear();
+        renderItems();
     }
 
     // ─── Discount ───────────────────────────────────────────────────────
