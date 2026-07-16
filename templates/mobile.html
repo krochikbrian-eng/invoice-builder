@@ -88,6 +88,10 @@
         select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23585b70' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px !important; }
         .main-content { padding-bottom: 100px; padding-top: 68px; }
         .mobile-header { position: fixed; top: 0; left: 0; right: 0; z-index: 40; background: #11111b; border-bottom: 1px solid #313244; height: 62px; display: flex; align-items: center; padding: 0 16px; gap: 12px; }
+        .m-company-switch { margin-left: auto; display: flex; gap: 3px; background: #181825; border-radius: 10px; padding: 3px; }
+        .m-company-btn { font-size: .8rem; font-weight: 700; color: #585b70; padding: 5px 10px; border-radius: 8px; }
+        .m-company-btn.active[data-company="zero"] { color: #89b4fa; background: rgba(137,180,250,0.16); }
+        .m-company-btn.active[data-company="lime"] { color: #a6e3a1; background: rgba(166,227,161,0.16); }
         .spinner { width: 20px; height: 20px; border: 2px solid #313244; border-top-color: #89b4fa; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .item-card { padding: 14px; margin-bottom: 10px; }
@@ -104,6 +108,8 @@
         input[type=text], input[type=number] { background: rgba(49,50,68,0.6); border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4; padding: 10px 14px; font-size: 0.9rem; min-height: 44px; width: 100%; }
         input:focus { outline: none; border-color: #89b4fa; }
         select.field { background: rgba(49,50,68,0.6); border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4; padding: 10px 14px; font-size: 0.875rem; min-height: 44px; }
+        input.field { background: rgba(49,50,68,0.6); border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4; }
+        input.field:focus { outline: none; border-color: #89b4fa; }
         select.field:focus { outline: none; border-color: #89b4fa; }
         .history-card { padding: 14px; margin-bottom: 10px; }
         .history-title { font-size: 1rem; font-weight: 700; }
@@ -246,6 +252,31 @@
     </div>
 </div>
 
+<!-- Manual item modal -->
+<div id="manual-item-modal" class="modal-overlay" onclick="if(event.target===this)closeManualItemModal()">
+    <div class="card p-5 w-full max-w-sm">
+        <h3 class="font-bold text-base mb-4">➕ Agregar ítem manual</h3>
+        <label class="text-xs text-gray-400 block mb-1">Título</label>
+        <input id="mi-title" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="Nombre del producto">
+        <div class="flex gap-3 mb-3">
+            <div class="flex-1">
+                <label class="text-xs text-gray-400 block mb-1">Cantidad</label>
+                <input id="mi-qty" type="number" inputmode="numeric" min="1" value="1" class="field w-full px-3 py-3 text-sm">
+            </div>
+            <div class="flex-1">
+                <label class="text-xs text-gray-400 block mb-1">Costo (c/u)</label>
+                <input id="mi-price" type="number" inputmode="decimal" min="0" step="0.01" class="field w-full px-3 py-3 text-sm" placeholder="0.00">
+            </div>
+        </div>
+        <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
+        <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-5" placeholder="TBA...">
+        <div class="flex gap-3">
+            <button onclick="closeManualItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
+            <button id="mi-submit" onclick="submitManualItem()" class="flex-1 btn-primary py-3 rounded-xl text-sm">Agregar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Mobile Header -->
 <header class="mobile-header">
     <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
@@ -259,7 +290,11 @@
     </svg>
     <div>
         <h1 class="text-base font-bold leading-tight" onclick="showTab('items')" style="cursor:pointer;">⚡ Gestión de Envíos</h1>
-        <p class="text-xs" style="color:#585b70;">Zero International</p>
+        <p class="text-xs" style="color:#585b70;" id="company-name">Zero International</p>
+    </div>
+    <div class="m-company-switch">
+        <button class="m-company-btn" data-company="zero" onclick="setCompany('zero')">Zero</button>
+        <button class="m-company-btn" data-company="lime" onclick="setCompany('lime')">Lime</button>
     </div>
 </header>
 
@@ -279,6 +314,7 @@
                  onclick="document.getElementById('csv-input').click()">
                 <div class="text-4xl mb-3">📁</div>
                 <p class="text-sm font-semibold mb-1">Tocá para elegir el CSV</p>
+                <p class="text-lg font-extrabold mb-1" id="upload-company-banner">Se sube a: ZERO</p>
                 <p class="text-xs" style="color:#585b70;">Amazon Business export (.csv)</p>
                 <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="uploadFile(this.files[0])">
             </div>
@@ -293,8 +329,9 @@
     <!-- ── Items Tab ── -->
     <section id="tab-items" class="tab-content">
         <div class="pt-4 pb-2">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-bold">📦 Ítems Disponibles <span id="pending-count" style="color:#89b4fa;"></span></h2>
+            <div class="flex items-center justify-between mb-3 gap-2">
+                <h2 class="text-base font-bold">📦 Ítems <span id="pending-count" style="color:#89b4fa;"></span></h2>
+                <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0">➕ Ítem manual</button>
             </div>
 
             <!-- Search + filter -->
@@ -422,9 +459,10 @@
 </nav>
 
 <script>
-// ─── Company (scopes all API data; switch lives on desktop) ─────────────────
+// ─── Company (scopes all API data) ──────────────────────────────────────────
+const COMPANY_NAMES = { zero: 'Zero International', lime: 'Limesquare' };
 let activeCompany = localStorage.getItem('activeCompany') || 'zero';
-if (activeCompany !== 'zero' && activeCompany !== 'lime') activeCompany = 'zero';
+if (!COMPANY_NAMES[activeCompany]) activeCompany = 'zero';
 const _origFetch = window.fetch.bind(window);
 window.fetch = (url, opts = {}) => {
     try {
@@ -434,6 +472,79 @@ window.fetch = (url, opts = {}) => {
     } catch (e) {}
     return _origFetch(url, opts);
 };
+
+function applyCompanyUI() {
+    const nameEl = document.getElementById('company-name');
+    if (nameEl) nameEl.textContent = COMPANY_NAMES[activeCompany];
+    document.querySelectorAll('.m-company-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.company === activeCompany);
+    });
+    const banner = document.getElementById('upload-company-banner');
+    if (banner) {
+        banner.textContent = `Se sube a: ${activeCompany.toUpperCase()}`;
+        banner.style.color = activeCompany === 'lime' ? '#a6e3a1' : '#89b4fa';
+    }
+}
+
+async function setCompany(company) {
+    if (!COMPANY_NAMES[company] || company === activeCompany) return;
+    activeCompany = company;
+    localStorage.setItem('activeCompany', company);
+    applyCompanyUI();
+    if (typeof boxItems !== 'undefined' && boxItems) { boxItems.clear(); if (typeof renderBox === 'function') renderBox(); if (typeof updateBoxBadge === 'function') updateBoxBadge(); }
+    try {
+        const res = await fetch('/api/config/po');
+        const data = await res.json();
+        if (data.pos) localStorage.setItem('acceptedPOs', JSON.stringify(data.pos));
+    } catch (e) {}
+    showTab(localStorage.getItem('lastTab') || 'items');
+    toast(`Empresa activa: ${COMPANY_NAMES[company]}`, 'success');
+}
+
+// ─── Manual item ────────────────────────────────────────────────────────────
+function openManualItemModal() {
+    document.getElementById('mi-title').value = '';
+    document.getElementById('mi-qty').value = '1';
+    document.getElementById('mi-price').value = '';
+    document.getElementById('mi-tracking').value = '';
+    document.getElementById('manual-item-modal').classList.add('open');
+    setTimeout(() => document.getElementById('mi-title').focus(), 50);
+}
+
+function closeManualItemModal() {
+    document.getElementById('manual-item-modal').classList.remove('open');
+}
+
+async function submitManualItem() {
+    const title = document.getElementById('mi-title').value.trim();
+    const qty = parseInt(document.getElementById('mi-qty').value);
+    const price = parseFloat(document.getElementById('mi-price').value);
+    const tracking = document.getElementById('mi-tracking').value.trim();
+    if (!title) { toast('Ingresá un título', 'error'); return; }
+    if (!qty || qty <= 0) { toast('Cantidad inválida', 'error'); return; }
+    if (isNaN(price) || price < 0) { toast('Costo inválido', 'error'); return; }
+    const btn = document.getElementById('mi-submit');
+    btn.disabled = true; btn.textContent = 'Agregando...';
+    try {
+        const res = await fetch('/api/items/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, qty, price, tracking })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            toast('Ítem agregado', 'success');
+            closeManualItemModal();
+            loadItems();
+        } else {
+            toast(data.error || 'Error al agregar', 'error');
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Agregar';
+    }
+}
 
 // ─── Copy Tracking ────────────────────────────────────────────────────────
 function copyItemTitle(itemId) {
@@ -1222,6 +1333,7 @@ function escHtml(str) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+    applyCompanyUI();
     // Sync PO config from backend
     try {
         const res = await fetch('/api/config/po');
