@@ -300,10 +300,11 @@
                      ondragleave="this.classList.remove('drag-over')"
                      ondrop="handleDrop(event)">
                     <div class="text-4xl mb-4">📁</div>
-                    <p class="text-lg mb-2">Arrastrá el CSV acá</p>
+                    <p class="text-lg mb-1">Arrastrá el CSV acá</p>
+                    <p class="text-2xl font-extrabold mb-3" id="upload-company-banner">Se sube a: ZERO</p>
                     <p class="text-gray-500 text-sm mb-4">o hacé click para buscar</p>
                     <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="uploadFile(this.files[0])">
-                    <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg">Elegir Archivo</button>
+                    <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg" id="upload-btn">Elegir Archivo — ZERO</button>
                 </div>
                 <div id="upload-status" class="mt-4 hidden">
                     <div class="flex items-center gap-2">
@@ -535,6 +536,12 @@
         document.querySelectorAll('.company-btn').forEach(btn => {
             btn.classList.toggle('company-active', btn.dataset.company === activeCompany);
         });
+        const label = activeCompany.toUpperCase();
+        const color = activeCompany === 'lime' ? '#a6e3a1' : '#89b4fa';
+        const banner = document.getElementById('upload-company-banner');
+        if (banner) { banner.textContent = `Se sube a: ${label}`; banner.style.color = color; }
+        const upBtn = document.getElementById('upload-btn');
+        if (upBtn) upBtn.textContent = `Elegir Archivo — ${label}`;
     }
 
     async function setCompany(company) {
