@@ -890,8 +890,8 @@
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">ASIN</span>
-                            <p class="text-blue-400 font-mono flex items-center gap-1">
-                                ${item.asin ? `<span class="copyable" title="Click para copiar: ${escHtml(item.asin)}" onclick="event.stopPropagation(); copyItemField(${item.id}, 'asin', this)">${escHtml(item.asin)}${copyIcon}</span>
+                            <p class="text-blue-400 font-mono flex items-center gap-1 whitespace-nowrap">
+                                ${item.asin ? `<span class="copyable inline-flex items-center gap-0.5" title="Click para copiar: ${escHtml(item.asin)}" onclick="event.stopPropagation(); copyItemField(${item.id}, 'asin', this)">${escHtml(item.asin)}${copyIcon}</span>
                                 <a href="https://www.amazon.com/dp/${encodeURIComponent(item.asin)}" target="_blank" rel="noopener" title="Ver en Amazon" class="text-gray-500 hover:text-orange-300 transition-colors" onclick="event.stopPropagation()">
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
                                 </a>` : '—'}
