@@ -304,7 +304,7 @@
                     <p class="text-2xl font-extrabold mb-3" id="upload-company-banner">Se sube a: ZERO</p>
                     <p class="text-gray-500 text-sm mb-4">o hacé click para buscar</p>
                     <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="uploadFile(this.files[0])">
-                    <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg" id="upload-btn">Elegir Archivo — ZERO</button>
+                    <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg">Elegir Archivo</button>
                 </div>
                 <div id="upload-status" class="mt-4 hidden">
                     <div class="flex items-center gap-2">
@@ -540,8 +540,6 @@
         const color = activeCompany === 'lime' ? '#a6e3a1' : '#89b4fa';
         const banner = document.getElementById('upload-company-banner');
         if (banner) { banner.textContent = `Se sube a: ${label}`; banner.style.color = color; }
-        const upBtn = document.getElementById('upload-btn');
-        if (upBtn) upBtn.textContent = `Elegir Archivo — ${label}`;
     }
 
     async function setCompany(company) {
