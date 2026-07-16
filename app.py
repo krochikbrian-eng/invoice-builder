@@ -1603,6 +1603,38 @@ def delete_invoice(invoice_id):
     conn.close()
     return jsonify({'message': 'Invoice eliminado, items devueltos a pendientes'})
 
+@app.route('/api/items/manual', methods=['POST'])
+def add_manual_item():
+    """Add a manually-entered item (title, qty, cost, tracking)."""
+    data = request.get_json() or {}
+    title = str(data.get('title', '')).strip()
+    tracking = str(data.get('tracking', '')).strip()
+    try:
+        qty = int(data.get('qty'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Cantidad inválida'}), 400
+    try:
+        price = round(float(data.get('price')), 2)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Costo inválido'}), 400
+    if not title:
+        return jsonify({'error': 'El título es obligatorio'}), 400
+    if qty <= 0:
+        return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+    if price < 0:
+        return jsonify({'error': 'El costo no puede ser negativo'}), 400
+    order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
+    order_date = date.today().strftime('%d/%m/%Y')
+    conn = get_db()
+    cur = conn.execute("""
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status)
+        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending')
+    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return jsonify({'message': 'Ítem agregado', 'id': new_id})
+
 @app.route('/api/items/<int:item_id>', methods=['DELETE'])
 def delete_item(item_id):
     """Delete an item (any status)."""
