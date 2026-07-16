@@ -44,6 +44,46 @@ CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 VALID_COMPANIES = ('zero', 'lime')
 COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
 
+# Per-company branding for the generated invoice (logo, header sender/customer, footer bank/warranty)
+INVOICE_BRAND = {
+    'zero': {
+        'logo': 'zero-logo.png',
+        'sender': ['7265 NW 74TH ST UNIT 9', 'MEDLEY, Florida 33166'],
+        'customer': 'Menta Granizada SRL',
+        'cust_name': 'Name: Menta Granizada SRL',
+        'cust_address': 'Vera 1150',
+        'cust_city': 'City:Buenos Aires,ARG',
+        'cust_zip': 'ZIP: 1414',
+        'cust_cuit': 'CUIT: 30-71670182-0',
+        'ship_to': 'Same',
+        'incoterms': 'Incoterms: EXW',
+        'warranty': ['TERMS OF WARRANTY: 30 DAYS', 'NO CHARGER'],
+        'bank': ['Bank Acc. Name', 'Bank Acc. Nº', 'SWIFT:'],
+    },
+    'lime': {
+        'logo': 'lime-logo.png',
+        'sender': ['30 W. 26th Street', 'New York, NY 10010'],
+        'customer': 'INMERSIA SRL',
+        'cust_name': 'Name: INMERSIA SRL',
+        'cust_address': 'Pedro Lozano 4579',
+        'cust_city': 'City: CABA, Argentina',
+        'cust_zip': 'ZIP: 1417',
+        'cust_cuit': 'CUIT: 30-71798023-5',
+        'ship_to': 'Same',
+        'incoterms': 'Incoterms: EXW',
+        'warranty': ['TERMS OF WARRANTY: 90 DAYS'],
+        'bank': ['All transfers to: LimeSquare LLC', 'Routing Number: 026073150',
+                 'Bank Acc. N° 822000789644', 'SWIFT/BIC: CMFGUS33',
+                 'Wise Adress: 30 W. 26th Street, New York NY 10010'],
+    },
+}
+
+def invoice_brand(company):
+    return INVOICE_BRAND.get(company if company in VALID_COMPANIES else 'zero', INVOICE_BRAND['zero'])
+
+def logo_path(company):
+    return os.path.join(BASE_DIR, 'static', invoice_brand(company)['logo'])
+
 def get_company():
     """Resolve the active company from the request (header, query, or body)."""
     c = str(request.headers.get('X-Company') or request.args.get('company') or '').strip().lower()
@@ -375,8 +415,9 @@ def parse_csv(file_content, company='zero'):
 
 # ─── XLSX Generation ────────────────────────────────────────────────────────
 
-def generate_xlsx(invoice_number, invoice_date, items):
-    """Generate XLSX invoice matching the real Zero LLC template exactly."""
+def generate_xlsx(invoice_number, invoice_date, items, company='zero'):
+    """Generate XLSX invoice using the per-company branding."""
+    brand = invoice_brand(company)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Invoice'
@@ -409,15 +450,16 @@ def generate_xlsx(invoice_number, invoice_date, items):
 
     # Row 1 - Logo (image, no text)
     ws.row_dimensions[1].height = 60.75
-    if os.path.exists(LOGO_PATH):
-        logo = XLImage(LOGO_PATH)
+    _logo_path = logo_path(company)
+    if os.path.exists(_logo_path):
+        logo = XLImage(_logo_path)
         logo.width = 350
         logo.height = 124
         logo.anchor = 'A1'
         ws.add_image(logo, 'A1')
 
     # Row 2: Address line 1 + Invoice #
-    ws['A2'] = '7265 NW 74TH ST UNIT 9\n'
+    ws['A2'] = brand['sender'][0]
     ws['A2'].font = bold_11
     ws['E2'] = 'Invoice #:'
     ws['E2'].font = bold_11
@@ -427,7 +469,7 @@ def generate_xlsx(invoice_number, invoice_date, items):
 
     # Row 3: Address line 2 + Invoice Date
     ws.row_dimensions[3].height = 14.25
-    ws['A3'] = 'MEDLEY, Florida 33166'
+    ws['A3'] = brand['sender'][1]
     ws['A3'].font = bold_10
     ws['E3'] = 'Invoice Date:'
     ws['E3'].font = bold_10
@@ -440,7 +482,7 @@ def generate_xlsx(invoice_number, invoice_date, items):
     ws.row_dimensions[4].height = 14.25
     ws['E4'] = 'Customer:'
     ws['E4'].font = bold_11
-    ws['F4'] = 'Menta Granizada SRL'
+    ws['F4'] = brand['customer']
     ws['F4'].font = bold_10
 
     # Row 5 - spacer
@@ -449,7 +491,7 @@ def generate_xlsx(invoice_number, invoice_date, items):
     # Row 6: Name (merged A6:C6)
     ws.row_dimensions[6].height = 14.25
     ws.merge_cells('A6:C6')
-    ws['A6'] = 'Name: Menta Granizada SRL'
+    ws['A6'] = brand['cust_name']
     ws['A6'].font = bold_10
 
     # Row 7: Address + Ship To
@@ -457,26 +499,26 @@ def generate_xlsx(invoice_number, invoice_date, items):
     ws['A7'] = 'Address:'
     ws['A7'].font = bold_10
     ws.merge_cells('B7:C7')
-    ws['B7'] = 'Vera 1150'
+    ws['B7'] = brand['cust_address']
     ws['B7'].font = normal_10
     ws['E7'] = 'Ship To:'
     ws['E7'].font = bold_10
-    ws['F7'] = 'Same'
+    ws['F7'] = brand['ship_to']
     ws['F7'].font = bold_10
 
     # Row 8: City, ZIP, Incoterms
     ws.row_dimensions[8].height = 14.25
-    ws['A8'] = 'City:Buenos Aires,ARG'
+    ws['A8'] = brand['cust_city']
     ws['A8'].font = bold_10
-    ws['C8'] = 'ZIP: 1414'
+    ws['C8'] = brand['cust_zip']
     ws['C8'].font = normal_10
     ws['C8'].alignment = left_align
-    ws['E8'] = 'Incoterms: EXW'
+    ws['E8'] = brand['incoterms']
     ws['E8'].font = bold_9
 
     # Row 9: CUIT
     ws.row_dimensions[9].height = 14.25
-    ws['A9'] = 'CUIT: 30-71670182-0'
+    ws['A9'] = brand['cust_cuit']
     ws['A9'].font = bold_10
 
     # Row 10 - spacer
@@ -534,14 +576,13 @@ def generate_xlsx(invoice_number, invoice_date, items):
     last_data_row = row_num - 1
     footer_start = last_data_row + 3  # 2 empty rows after last item
 
-    # Terms of warranty
-    ws.cell(row=footer_start, column=1, value='TERMS OF WARRANTY: 30 DAYS').font = bold_7
-    ws.cell(row=footer_start + 1, column=1, value='NO CHARGER').font = bold_7
+    # Terms of warranty (per company, one line per entry)
+    for i, wline in enumerate(brand['warranty']):
+        ws.cell(row=footer_start + i, column=1, value=wline).font = bold_7
 
-    # Bank info in column D
-    ws.cell(row=footer_start + 1, column=4, value='Bank Acc. Name').font = normal_8
-    ws.cell(row=footer_start + 2, column=4, value='Bank Acc. Nº').font = normal_8
-    ws.cell(row=footer_start + 3, column=4, value='SWIFT:').font = normal_8
+    # Bank info in column D (per company, one line per entry)
+    for i, bline in enumerate(brand['bank']):
+        ws.cell(row=footer_start + 1 + i, column=4, value=bline).font = normal_8
 
     # All sales in US Dollars
     ws.merge_cells(start_row=footer_start + 4, start_column=1, end_row=footer_start + 4, end_column=2)
@@ -572,8 +613,9 @@ def generate_xlsx(invoice_number, invoice_date, items):
 
 # ─── PDF Generation ─────────────────────────────────────────────────────────
 
-def generate_pdf(invoice_number, invoice_date, items):
-    """Generate a PDF invoice matching the Zero LLC reference template exactly."""
+def generate_pdf(invoice_number, invoice_date, items, company='zero'):
+    """Generate a PDF invoice using the per-company branding."""
+    brand = invoice_brand(company)
     output = io.BytesIO()
     doc = SimpleDocTemplate(
         output, pagesize=letter,
@@ -599,22 +641,23 @@ def generate_pdf(invoice_number, invoice_date, items):
     elements = []
 
     # ── Logo ──
-    if os.path.exists(LOGO_PATH):
-        elements.append(RLImage(LOGO_PATH, width=2.2*inch, height=0.78*inch, hAlign='LEFT'))
+    _logo_path = logo_path(company)
+    if os.path.exists(_logo_path):
+        elements.append(RLImage(_logo_path, width=2.2*inch, height=0.78*inch, hAlign='LEFT'))
         elements.append(Spacer(1, 6))
 
     # ── Header: address (left) + invoice info (right) in bordered table ──
     date_str = invoice_date.strftime('%-m/%-d/%Y') if isinstance(invoice_date, (date, datetime)) else str(invoice_date)
     header_data = [
-        [Paragraph('7265 NW 74TH ST UNIT 9', bold11),
+        [Paragraph(brand['sender'][0], bold11),
          Paragraph('Invoice #:', bold11),
          Paragraph(str(invoice_number), bold10)],
-        [Paragraph('MEDLEY, Florida 33166', bold10),
+        [Paragraph(brand['sender'][1], bold10),
          Paragraph('Invoice Date:', bold10),
          Paragraph(date_str, bold10)],
         ['',
          Paragraph('Customer:', bold11),
-         Paragraph('Menta Granizada SRL', bold10)],
+         Paragraph(brand['customer'], bold10)],
     ]
     left_w = PAGE_W * 0.45
     label_w = PAGE_W * 0.22
@@ -633,14 +676,14 @@ def generate_pdf(invoice_number, invoice_date, items):
 
     # ── Customer info section ──
     cust_data = [
-        [Paragraph('Name: Menta Granizada SRL', bold10), '', '',
+        [Paragraph(brand['cust_name'], bold10), '', '',
          '', ''],
-        [Paragraph('Address:', bold10), Paragraph('Vera 1150', norm10), '',
-         Paragraph('Ship To:', bold10), Paragraph('Same', bold10)],
-        [Paragraph('City:Buenos Aires,ARG', bold10), '',
-         Paragraph('ZIP: 1414', norm10),
-         Paragraph('Incoterms: EXW', bold9), ''],
-        [Paragraph('CUIT: 30-71670182-0', bold10), '', '', '', ''],
+        [Paragraph('Address:', bold10), Paragraph(brand['cust_address'], norm10), '',
+         Paragraph('Ship To:', bold10), Paragraph(brand['ship_to'], bold10)],
+        [Paragraph(brand['cust_city'], bold10), '',
+         Paragraph(brand['cust_zip'], norm10),
+         Paragraph(brand['incoterms'], bold9), ''],
+        [Paragraph(brand['cust_cuit'], bold10), '', '', '', ''],
     ]
     cw = [PAGE_W*0.28, PAGE_W*0.17, PAGE_W*0.15, PAGE_W*0.22, PAGE_W*0.18]
     cust_table = Table(cust_data, colWidths=cw)
@@ -706,15 +749,22 @@ def generate_pdf(invoice_number, invoice_date, items):
     elements.append(Spacer(1, 10))
 
     # ── Footer section: 2 columns (left: warranty/signature, right: bank/totals) ──
+    _warranty = brand['warranty']
+    _bank = brand['bank']
+    def _col0(r):
+        if r < len(_warranty):
+            return Paragraph(_warranty[r], bold7)
+        if r == 3:
+            return Paragraph('All sales are in US Dollars', bold9)
+        return ''
+    def _col2(r):
+        return Paragraph(_bank[r], norm8) if r < len(_bank) else ''
     footer_data = [
-        [Paragraph('TERMS OF WARRANTY: 30 DAYS', bold7), '',
-         Paragraph('Bank Acc. Name', norm8), ''],
-        [Paragraph('NO CHARGER', bold7), '',
-         Paragraph('Bank Acc. Nº', norm8), ''],
-        ['', '',
-         Paragraph('SWIFT:', norm8), ''],
-        [Paragraph('All sales are in US Dollars', bold9), '', '', ''],
-        ['', '', '', ''],
+        [_col0(0), '', _col2(0), ''],
+        [_col0(1), '', _col2(1), ''],
+        [_col0(2), '', _col2(2), ''],
+        [_col0(3), '', _col2(3), ''],
+        [_col0(4), '', _col2(4), ''],
         [Paragraph('SIGNATURE: X___________________________________', norm8), '',
          Paragraph('Non Taxable Subtotal', norm8),
          Paragraph(f"${subtotal:,.2f}", norm10)],
@@ -1094,8 +1144,8 @@ def generate_invoice():
     conn.commit()
 
     # Generate files
-    xlsx_buf = generate_xlsx(invoice_number, invoice_date, items)
-    pdf_buf = generate_pdf(invoice_number, invoice_date, items)
+    xlsx_buf = generate_xlsx(invoice_number, invoice_date, items, company)
+    pdf_buf = generate_pdf(invoice_number, invoice_date, items, company)
     remito_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, items)
 
     # Generate TXT with trackings (grouped with item names)
@@ -1147,8 +1197,8 @@ def generate_invoice():
             body = '\n'.join(body_lines)
 
             # Regenerate buffers for email (the previous ones were consumed by ZIP)
-            xlsx_buf_email = generate_xlsx(invoice_number, invoice_date, items)
-            pdf_buf_email = generate_pdf(invoice_number, invoice_date, items)
+            xlsx_buf_email = generate_xlsx(invoice_number, invoice_date, items, company)
+            pdf_buf_email = generate_pdf(invoice_number, invoice_date, items, company)
             remito_np_email = generate_remito_pdf_no_prices(invoice_number, invoice_date, items)
 
             email_files = [
@@ -1412,9 +1462,13 @@ def download_invoice(invoice_id):
     items = [{'title': r['title'], 'price': r['price'], 'qty': r['qty'], 'order_id': r['order_id'], 'tracking': r['tracking'] if 'tracking' in r.keys() else ''} for r in rows]
 
     invoice_date = datetime.strptime(inv['date'], '%Y-%m-%d').date()
+    try:
+        company = inv['company'] or 'zero'
+    except (IndexError, KeyError):
+        company = 'zero'
 
-    xlsx_buf = generate_xlsx(inv['invoice_number'], invoice_date, items)
-    pdf_buf = generate_pdf(inv['invoice_number'], invoice_date, items)
+    xlsx_buf = generate_xlsx(inv['invoice_number'], invoice_date, items, company)
+    pdf_buf = generate_pdf(inv['invoice_number'], invoice_date, items, company)
     remito_no_prices_buf = generate_remito_pdf_no_prices(inv['invoice_number'], invoice_date, items)
 
     # Generate TXT with trackings (grouped with item names)
@@ -1545,8 +1599,8 @@ def add_items_to_invoice(invoice_id):
             zf.writestr(f'Remito_{invoice_number}_trackings.txt', txt_content)
         download_name = f'Remito_{invoice_number}.zip'
     else:
-        xlsx_buf = generate_xlsx(invoice_number, invoice_date, all_items)
-        pdf_buf = generate_pdf(invoice_number, invoice_date, all_items)
+        xlsx_buf = generate_xlsx(invoice_number, invoice_date, all_items, company)
+        pdf_buf = generate_pdf(invoice_number, invoice_date, all_items, company)
         remito_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -1587,8 +1641,8 @@ def add_items_to_invoice(invoice_id):
                     (f'Remito_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
                 ]
             else:
-                xlsx_e = generate_xlsx(invoice_number, invoice_date, all_items)
-                pdf_e = generate_pdf(invoice_number, invoice_date, all_items)
+                xlsx_e = generate_xlsx(invoice_number, invoice_date, all_items, company)
+                pdf_e = generate_pdf(invoice_number, invoice_date, all_items, company)
                 remito_e = generate_remito_pdf_no_prices(invoice_number, invoice_date, all_items)
                 email_files = [
                     (f'Invoice_{invoice_number}.xlsx', xlsx_e.read(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
