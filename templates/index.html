@@ -119,6 +119,12 @@
         .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
         .tab-active { color: var(--blue) !important; background: rgba(137,180,250,0.12) !important; font-weight: 600; }
 
+        /* Company switch */
+        .company-btn { color: var(--text-dim); font-weight: 600; transition: color .15s ease, background .15s ease; }
+        .company-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        .company-active[data-company="zero"] { color: #89b4fa !important; background: rgba(137,180,250,0.16) !important; }
+        .company-active[data-company="lime"] { color: #a6e3a1 !important; background: rgba(166,227,161,0.16) !important; }
+
         /* Stat chips */
         .stat-chip {
             background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem;
@@ -266,8 +272,13 @@
                 </svg>
                 <div>
                     <h1 class="text-lg font-bold leading-tight">Gestión de Envíos</h1>
-                    <p class="text-xs text-gray-500 leading-tight">Zero International</p>
+                    <p class="text-xs text-gray-500 leading-tight" id="company-name">Zero International</p>
                 </div>
+            </div>
+            <div class="flex items-center gap-1 bg-black/20 rounded-xl p-1" id="company-switch" title="Empresa activa (todo lo que subís y ves es de esta empresa)">
+                <span class="text-xs text-gray-500 px-2 hidden sm:inline">Empresa:</span>
+                <button onclick="setCompany('zero')" class="company-btn px-3 py-1.5 rounded-lg text-sm" data-company="zero">Zero</button>
+                <button onclick="setCompany('lime')" class="company-btn px-3 py-1.5 rounded-lg text-sm" data-company="lime">Lime</button>
             </div>
             <div class="flex gap-1 bg-black/20 rounded-xl p-1">
                 <button onclick="showTab('upload')" class="tab-btn px-4 py-2 rounded-lg text-sm" data-tab="upload">📤 Subir CSV</button>
@@ -502,6 +513,50 @@
     </main>
 
     <script>
+    // ─── Company ────────────────────────────────────────────────────────
+    const COMPANY_NAMES = { zero: 'Zero International', lime: 'Lime Square LLC' };
+    let activeCompany = localStorage.getItem('activeCompany') || 'zero';
+    if (!COMPANY_NAMES[activeCompany]) activeCompany = 'zero';
+
+    // Inject X-Company header on every API call so the backend scopes data by company
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+        try {
+            if (typeof url === 'string' && url.startsWith('/api/')) {
+                opts = { ...opts, headers: { ...(opts.headers || {}), 'X-Company': activeCompany } };
+            }
+        } catch (e) {}
+        return _origFetch(url, opts);
+    };
+
+    function applyCompanyUI() {
+        const nameEl = document.getElementById('company-name');
+        if (nameEl) nameEl.textContent = COMPANY_NAMES[activeCompany];
+        document.querySelectorAll('.company-btn').forEach(btn => {
+            btn.classList.toggle('company-active', btn.dataset.company === activeCompany);
+        });
+    }
+
+    async function setCompany(company) {
+        if (!COMPANY_NAMES[company] || company === activeCompany) return;
+        activeCompany = company;
+        localStorage.setItem('activeCompany', company);
+        applyCompanyUI();
+        // Clear the invoice box/selection (they belong to the previous company)
+        boxItems.clear();
+        selectedItems.clear();
+        renderBox();
+        // Refresh accepted-PO cache for the new company
+        try {
+            const res = await fetch('/api/config/po');
+            const data = await res.json();
+            if (data.pos) localStorage.setItem('acceptedPOs', JSON.stringify(data.pos));
+        } catch (e) {}
+        // Reload the data of the currently visible tab
+        showTab(localStorage.getItem('lastTab') || 'items');
+        toast(`Empresa activa: ${COMPANY_NAMES[company]}`, 'success');
+    }
+
     // ─── State ──────────────────────────────────────────────────────────
     let allItems = [];
     let boxItems = new Map(); // id -> {item, qty}
@@ -1743,6 +1798,7 @@
 
     // ─── Init ───────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
+        applyCompanyUI();
         try {
             const res = await fetch('/api/config/po');
             const data = await res.json();

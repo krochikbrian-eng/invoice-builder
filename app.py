@@ -40,40 +40,79 @@ DB_PATH = os.path.join(DATA_DIR, 'invoices.db')
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'invoice-template.xlsx')
 CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 
+# ─── Company ────────────────────────────────────────────────────────────────
+VALID_COMPANIES = ('zero', 'lime')
+COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
+
+def get_company():
+    """Resolve the active company from the request (header, query, or body)."""
+    c = str(request.headers.get('X-Company') or request.args.get('company') or '').strip().lower()
+    if c not in VALID_COMPANIES:
+        try:
+            body = request.get_json(silent=True) or {}
+            c = str(body.get('company', '')).strip().lower()
+        except Exception:
+            c = ''
+    return c if c in VALID_COMPANIES else 'zero'
+
 # ─── Config ─────────────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {'accepted_pos': ['9999', '99999']}
+_COMPANY_KEYS = ('accepted_pos', 'last_invoice_number', 'email', 'smtp', 'sendgrid_api_key', 'sendgrid_from')
+
+def _migrate_config(cfg):
+    """Ensure config has a per-company structure. Legacy flat config becomes 'zero'."""
+    if not isinstance(cfg, dict):
+        cfg = {}
+    if 'companies' not in cfg:
+        flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
+        flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
+        cfg = {'companies': {'zero': flat}}
+    cfg.setdefault('companies', {})
+    for comp in VALID_COMPANIES:
+        cfg['companies'].setdefault(comp, {'accepted_pos': list(DEFAULT_CONFIG['accepted_pos'])})
+    return cfg
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH) as f:
-            return _json.load(f)
-    return dict(DEFAULT_CONFIG)
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = _json.load(f)
+        except Exception:
+            cfg = {}
+    else:
+        cfg = {}
+    return _migrate_config(cfg)
 
 def save_config(cfg):
     with open(CONFIG_PATH, 'w') as f:
         _json.dump(cfg, f, indent=2)
 
-def get_accepted_pos():
-    return load_config().get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
+def company_cfg(company=None):
+    """Return the config sub-dict for a company (defaults to active company)."""
+    if company not in VALID_COMPANIES:
+        company = get_company()
+    return load_config()['companies'][company]
 
-def _get_sendgrid_key():
-    return os.environ.get('SENDGRID_API_KEY', '') or load_config().get('sendgrid_api_key', '')
+def get_accepted_pos(company=None):
+    return company_cfg(company).get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
 
-def _get_sendgrid_from(cfg):
-    return os.environ.get('SENDGRID_FROM', '') or cfg.get('sendgrid_from', '')
+def _get_sendgrid_key(company=None):
+    return (company_cfg(company).get('sendgrid_api_key', '') or os.environ.get('SENDGRID_API_KEY', ''))
+
+def _get_sendgrid_from(company=None):
+    return (company_cfg(company).get('sendgrid_from', '') or os.environ.get('SENDGRID_FROM', ''))
 
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
-                                  zip_data: bytes = None, zip_filename: str = None):
-    cfg = load_config()
-    sg_key = _get_sendgrid_key()
+                                  zip_data: bytes = None, zip_filename: str = None, company: str = 'zero'):
+    sg_key = _get_sendgrid_key(company)
     if sg_key:
-        _send_via_sendgrid(sg_key, cfg, files, to_email, subject, body, zip_data, zip_filename)
+        _send_via_sendgrid(sg_key, company, files, to_email, subject, body, zip_data, zip_filename)
     else:
-        _send_via_smtp(cfg, files, to_email, subject, body, zip_data, zip_filename)
+        _send_via_smtp(company_cfg(company), files, to_email, subject, body, zip_data, zip_filename)
 
-def _send_via_sendgrid(api_key: str, cfg: dict, files: list, to_email: str,
+def _send_via_sendgrid(api_key: str, company: str, files: list, to_email: str,
                        subject: str, body: str, zip_data=None, zip_filename=None):
-    from_email = _get_sendgrid_from(cfg)
+    from_email = _get_sendgrid_from(company)
     if not from_email:
         raise ValueError("SENDGRID_FROM no configurado — ingresá el email remitente en Configuración")
     attachments = []
@@ -206,6 +245,13 @@ def init_db():
         conn.commit()
     except Exception:
         pass  # Column already exists
+    # Migration: add company column to items and invoices (existing data = 'zero')
+    for _tbl in ('items', 'invoices'):
+        try:
+            conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN company TEXT DEFAULT 'zero'")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
@@ -218,14 +264,14 @@ def init_db():
         conn.commit()
     conn.close()
 
-def get_next_invoice_number():
+def get_next_invoice_number(company='zero'):
     conn = get_db()
-    row = conn.execute("SELECT MAX(invoice_number) as max_num FROM invoices").fetchone()
+    row = conn.execute("SELECT MAX(invoice_number) as max_num FROM invoices WHERE company = ?", (company,)).fetchone()
     conn.close()
-    db_max = row['max_num'] if row and row['max_num'] else 2069
-    # Check config override
-    cfg = load_config()
-    config_max = cfg.get('last_invoice_number', 0)
+    base = 2069 if company == 'zero' else 0
+    db_max = row['max_num'] if row and row['max_num'] else base
+    # Check config override (per company)
+    config_max = company_cfg(company).get('last_invoice_number', 0) or 0
     return max(db_max, config_max) + 1
 
 # ─── CSV Parsing ────────────────────────────────────────────────────────────
@@ -252,7 +298,7 @@ def parse_price(val):
     except (ValueError, TypeError):
         return 0.0
 
-def parse_csv(file_content):
+def parse_csv(file_content, company='zero'):
     """Parse Amazon Business CSV — only import items with 'Estado de entrega' == 'Entregado'."""
     # Try utf-8-sig first, then latin-1
     for encoding in ['utf-8-sig', 'utf-8', 'latin-1']:
@@ -265,12 +311,12 @@ def parse_csv(file_content):
 
     reader = csv.DictReader(io.StringIO(text))
     items = []
+    accepted_pos = get_accepted_pos(company)
 
     for row in reader:
         # FILTER 1: only accepted POs (configurable)
         po_raw = row.get('Número de PO', '')
         po_clean = clean_csv_value(po_raw)
-        accepted_pos = get_accepted_pos()
         if po_clean not in accepted_pos:
             continue
 
@@ -905,8 +951,9 @@ def upload_csv():
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'File must be CSV'}), 400
 
+    company = get_company()
     content = file.read()
-    items = parse_csv(content)
+    items = parse_csv(content, company)
 
     if not items:
         return jsonify({'error': 'No items found with "Estado de entrega" = Entregado'}), 400
@@ -916,21 +963,21 @@ def upload_csv():
     saved = 0
     skipped = 0
     for item in items:
-        # Check if this order_id + asin combo already exists
+        # Check if this order_id + asin combo already exists (within the same company)
         existing = conn.execute(
-            "SELECT id FROM items WHERE order_id = ? AND asin = ? AND title = ?",
-            (item['order_id'], item['asin'], item['title'])
+            "SELECT id FROM items WHERE order_id = ? AND asin = ? AND title = ? AND company = ?",
+            (item['order_id'], item['asin'], item['title'], company)
         ).fetchone()
         if existing:
             skipped += 1
             continue
 
         conn.execute("""
-            INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         """, (item['order_id'], item['asin'], item['title'], item['price'],
               item['qty'], item['po'], item['order_date'], item['order_status'],
-              item['total_neto'], item['tracking']))
+              item['total_neto'], item['tracking'], company))
         saved += 1
 
     conn.commit()
@@ -945,14 +992,16 @@ def upload_csv():
 
 @app.route('/api/items')
 def get_items():
-    """Get all items with their status."""
+    """Get all items with their status (for the active company)."""
+    company = get_company()
     conn = get_db()
     rows = conn.execute("""
         SELECT i.*, inv.invoice_number
         FROM items i
         LEFT JOIN invoices inv ON i.invoice_id = inv.id
+        WHERE i.company = ?
         ORDER BY i.created_at DESC
-    """).fetchall()
+    """, (company,)).fetchall()
 
     # Count items per order_id for badge
     order_counts = {}
@@ -986,6 +1035,7 @@ def get_items():
 @app.route('/api/generate', methods=['POST'])
 def generate_invoice():
     """Generate invoice from selected items."""
+    company = get_company()
     data = request.json
     item_ids = data.get('items', [])
 
@@ -1025,14 +1075,14 @@ def generate_invoice():
         for item in items:
             item['price'] = round(item['price'] * (1 - discount / 100), 1)
 
-    invoice_number = get_next_invoice_number()
+    invoice_number = get_next_invoice_number(company)
     invoice_date = date.today()
     total = sum(i['price'] * i['qty'] for i in items)
 
     # Create invoice record
     cursor = conn.execute(
-        "INSERT INTO invoices (invoice_number, date, total, items_count, type) VALUES (?, ?, ?, ?, ?)",
-        (invoice_number, invoice_date.isoformat(), total, len(items), 'invoice')
+        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company) VALUES (?, ?, ?, ?, ?, ?)",
+        (invoice_number, invoice_date.isoformat(), total, len(items), 'invoice', company)
     )
     invoice_id = cursor.lastrowid
 
@@ -1079,12 +1129,11 @@ def generate_invoice():
     email_status = 'not_configured'
     email_address = ''
     email_error = ''
-    cfg = load_config()
-    to_email = cfg.get('email')
+    to_email = company_cfg(company).get('email')
     if to_email:
         email_address = to_email
         try:
-            subject = f"Invoice {invoice_number} — Zero"
+            subject = f"Invoice {invoice_number} — {COMPANY_NAMES[company]}"
 
             # Build body with trackings
             body_lines = [f"Invoice #{invoice_number} — {invoice_date.strftime('%d/%m/%Y')}"]
@@ -1108,7 +1157,7 @@ def generate_invoice():
                 (f'Remito_{invoice_number}-sin-precios.pdf', remito_np_email.read(), 'application/pdf'),
                 (f'Invoice_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
             ]
-            send_email_with_attachments(email_files, to_email, subject, body)
+            send_email_with_attachments(email_files, to_email, subject, body, company=company)
             email_status = 'sent'
         except Exception as exc:
             email_status = 'error'
@@ -1129,6 +1178,7 @@ def generate_invoice():
 @app.route('/api/generate-remito', methods=['POST'])
 def generate_remito():
     """Generate remito from selected items."""
+    company = get_company()
     data = request.json
     item_ids = data.get('items', [])
 
@@ -1167,14 +1217,14 @@ def generate_remito():
         for item in items:
             item['price'] = round(item['price'] * (1 - discount / 100), 1)
 
-    invoice_number = get_next_invoice_number()
+    invoice_number = get_next_invoice_number(company)
     invoice_date = date.today()
     total = sum(i['price'] * i['qty'] for i in items)
 
     # Create invoice record (same table)
     cursor = conn.execute(
-        "INSERT INTO invoices (invoice_number, date, total, items_count, type) VALUES (?, ?, ?, ?, ?)",
-        (invoice_number, invoice_date.isoformat(), total, len(items), 'remito')
+        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company) VALUES (?, ?, ?, ?, ?, ?)",
+        (invoice_number, invoice_date.isoformat(), total, len(items), 'remito', company)
     )
     invoice_id = cursor.lastrowid
 
@@ -1219,12 +1269,11 @@ def generate_remito():
     email_status = 'not_configured'
     email_address = ''
     email_error = ''
-    cfg = load_config()
-    to_email = cfg.get('email')
+    to_email = company_cfg(company).get('email')
     if to_email:
         email_address = to_email
         try:
-            subject = f"Invoice {invoice_number} — Zero"
+            subject = f"Invoice {invoice_number} — {COMPANY_NAMES[company]}"
 
             # Build body with trackings
             body_lines = [f"Remito #{invoice_number} — {invoice_date.strftime('%d/%m/%Y')}"]
@@ -1246,7 +1295,7 @@ def generate_remito():
                 (f'Remito_{invoice_number}-without-prices.pdf', pdf_np_email.read(), 'application/pdf'),
                 (f'Remito_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
             ]
-            send_email_with_attachments(email_files, to_email, subject, body)
+            send_email_with_attachments(email_files, to_email, subject, body, company=company)
             email_status = 'sent'
         except Exception as exc:
             email_status = 'error'
@@ -1313,10 +1362,12 @@ def download_remito(invoice_id):
 
 @app.route('/api/invoices')
 def get_invoices():
-    """Get invoice history."""
+    """Get invoice history (for the active company)."""
+    company = get_company()
     conn = get_db()
     invoices = conn.execute(
-        "SELECT * FROM invoices ORDER BY invoice_number DESC"
+        "SELECT * FROM invoices WHERE company = ? ORDER BY invoice_number DESC",
+        (company,)
     ).fetchall()
 
     result = []
@@ -1410,6 +1461,10 @@ def add_items_to_invoice(invoice_id):
     if not inv:
         conn.close()
         return jsonify({'error': 'Invoice no encontrado'}), 404
+    try:
+        company = inv['company'] or 'zero'
+    except (IndexError, KeyError):
+        company = 'zero'
 
     # Fetch new items (must be pending)
     placeholders = ','.join('?' * len(new_item_ids))
@@ -1508,12 +1563,11 @@ def add_items_to_invoice(invoice_id):
     email_status = 'not_configured'
     email_address = ''
     email_error = ''
-    cfg = load_config()
-    to_email = cfg.get('email')
+    to_email = company_cfg(company).get('email')
     if to_email:
         email_address = to_email
         try:
-            subject = f"{'Remito' if inv_type == 'remito' else 'Invoice'} {invoice_number} (actualizado) — Zero"
+            subject = f"{'Remito' if inv_type == 'remito' else 'Invoice'} {invoice_number} (actualizado) — {COMPANY_NAMES[company]}"
             body_lines = [f"{'Remito' if inv_type == 'remito' else 'Invoice'} #{invoice_number} actualizado — {invoice_date.strftime('%d/%m/%Y')}"]
             body_lines.append("")
             body_lines.append("Trackings:")
@@ -1542,7 +1596,7 @@ def add_items_to_invoice(invoice_id):
                     (f'Remito_{invoice_number}-sin-precios.pdf', remito_e.read(), 'application/pdf'),
                     (f'Invoice_{invoice_number}_trackings.txt', txt_content.encode('utf-8'), 'text/plain'),
                 ]
-            send_email_with_attachments(email_files, to_email, subject, body)
+            send_email_with_attachments(email_files, to_email, subject, body, company=company)
             email_status = 'sent'
         except Exception as exc:
             email_status = 'error'
@@ -1623,13 +1677,14 @@ def add_manual_item():
         return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
     if price < 0:
         return jsonify({'error': 'El costo no puede ser negativo'}), 400
+    company = get_company()
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
     conn = get_db()
     cur = conn.execute("""
-        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status)
-        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending')
-    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking))
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company)
+        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?)
+    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company))
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
@@ -1651,17 +1706,17 @@ def delete_item(item_id):
 
 @app.route('/api/config/po', methods=['GET'])
 def get_po_config():
-    return jsonify({'pos': get_accepted_pos()})
+    return jsonify({'pos': get_accepted_pos(get_company())})
 
 @app.route('/api/config/invoice-counter', methods=['GET'])
 def get_invoice_counter():
+    company = get_company()
     conn = get_db()
-    row = conn.execute("SELECT MAX(invoice_number) as max_num FROM invoices").fetchone()
+    row = conn.execute("SELECT MAX(invoice_number) as max_num FROM invoices WHERE company = ?", (company,)).fetchone()
     conn.close()
-    last = row['max_num'] if row and row['max_num'] else 2069
+    last = row['max_num'] if row and row['max_num'] else (2069 if company == 'zero' else 0)
     # Also check config override
-    cfg = load_config()
-    override = cfg.get('last_invoice_number')
+    override = company_cfg(company).get('last_invoice_number')
     if override and override > last:
         last = override
     return jsonify({'last_number': last})
@@ -1672,9 +1727,10 @@ def set_invoice_counter():
     num = data.get('last_number')
     if not num or not isinstance(num, int) or num < 1:
         return jsonify({'error': 'Número inválido'}), 400
-    cfg = load_config()
-    cfg['last_invoice_number'] = num
-    save_config(cfg)
+    company = get_company()
+    full = load_config()
+    full['companies'][company]['last_invoice_number'] = num
+    save_config(full)
     return jsonify({'last_number': num})
 
 @app.route('/api/config/po', methods=['PUT'])
@@ -1685,15 +1741,15 @@ def set_po_config():
         return jsonify({'error': 'Debe enviar una lista de POs'}), 400
     # Clean and deduplicate
     pos = list(dict.fromkeys(str(p).strip() for p in pos if str(p).strip()))
-    cfg = load_config()
-    cfg['accepted_pos'] = pos
-    save_config(cfg)
+    company = get_company()
+    full = load_config()
+    full['companies'][company]['accepted_pos'] = pos
+    save_config(full)
     return jsonify({'pos': pos})
 
 @app.route('/api/config/email', methods=['GET'])
 def get_email_config():
-    cfg = load_config()
-    return jsonify({'email': cfg.get('email', None)})
+    return jsonify({'email': company_cfg(get_company()).get('email', None)})
 
 @app.route('/api/config/email', methods=['PUT'])
 def set_email_config():
@@ -1701,15 +1757,15 @@ def set_email_config():
     email = data.get('email', None)
     if email is not None and email != '' and '@' not in str(email):
         return jsonify({'error': 'Email inválido'}), 400
-    cfg = load_config()
-    cfg['email'] = email if email else None
-    save_config(cfg)
-    return jsonify({'email': cfg['email']})
+    company = get_company()
+    full = load_config()
+    full['companies'][company]['email'] = email if email else None
+    save_config(full)
+    return jsonify({'email': full['companies'][company]['email']})
 
 @app.route('/api/config/smtp', methods=['GET'])
 def get_smtp_config():
-    cfg = load_config()
-    smtp = cfg.get('smtp', {})
+    smtp = company_cfg(get_company()).get('smtp', {})
     return jsonify({
         'server': smtp.get('server', 'smtp.gmail.com'),
         'port': smtp.get('port', 587),
@@ -1720,8 +1776,9 @@ def get_smtp_config():
 @app.route('/api/config/smtp', methods=['PUT'])
 def set_smtp_config():
     data = request.get_json()
-    cfg = load_config()
-    smtp = cfg.get('smtp', {})
+    company = get_company()
+    full = load_config()
+    smtp = full['companies'][company].get('smtp', {})
     if 'server' in data:
         smtp['server'] = str(data['server']).strip()
     if 'port' in data:
@@ -1730,21 +1787,22 @@ def set_smtp_config():
         smtp['user'] = str(data['user']).strip()
     if 'password' in data and data['password']:
         smtp['password'] = str(data['password'])
-    cfg['smtp'] = smtp
-    save_config(cfg)
+    full['companies'][company]['smtp'] = smtp
+    save_config(full)
     return jsonify({'ok': True, 'server': smtp.get('server'), 'port': smtp.get('port'), 'user': smtp.get('user'), 'password_set': bool(smtp.get('password', ''))})
 
 @app.route('/api/config/smtp/test', methods=['POST'])
 def test_smtp_config():
-    cfg = load_config()
-    to_email = cfg.get('email') or (request.get_json() or {}).get('to')
+    company = get_company()
+    to_email = company_cfg(company).get('email') or (request.get_json(silent=True) or {}).get('to')
     if not to_email:
         return jsonify({'ok': False, 'error': 'No hay email destino configurado'}), 400
     try:
         send_email_with_attachments(
             [], to_email,
             subject='Test Email — Invoice Builder',
-            body='Este es un email de prueba enviado desde Invoice Builder.\n\nSi lo recibiste, el envío de emails está funcionando correctamente.'
+            body='Este es un email de prueba enviado desde Invoice Builder.\n\nSi lo recibiste, el envío de emails está funcionando correctamente.',
+            company=company
         )
         return jsonify({'ok': True, 'sent_to': to_email})
     except Exception as exc:
@@ -1752,22 +1810,24 @@ def test_smtp_config():
 
 @app.route('/api/config/resend', methods=['GET'])
 def get_resend_config():
-    cfg = load_config()
+    company = get_company()
     return jsonify({
-        'api_key_set': bool(_get_sendgrid_key()),
-        'from_email': _get_sendgrid_from(cfg),
+        'api_key_set': bool(_get_sendgrid_key(company)),
+        'from_email': _get_sendgrid_from(company),
     })
 
 @app.route('/api/config/resend', methods=['PUT'])
 def set_resend_config():
     data = request.get_json()
-    cfg = load_config()
+    company = get_company()
+    full = load_config()
+    cc = full['companies'][company]
     if 'api_key' in data and data['api_key']:
-        cfg['sendgrid_api_key'] = str(data['api_key']).strip()
+        cc['sendgrid_api_key'] = str(data['api_key']).strip()
     if 'from_email' in data:
-        cfg['sendgrid_from'] = str(data['from_email']).strip()
-    save_config(cfg)
-    return jsonify({'ok': True, 'api_key_set': bool(_get_sendgrid_key()), 'from_email': _get_sendgrid_from(cfg)})
+        cc['sendgrid_from'] = str(data['from_email']).strip()
+    save_config(full)
+    return jsonify({'ok': True, 'api_key_set': bool(_get_sendgrid_key(company)), 'from_email': _get_sendgrid_from(company)})
 
 @app.route('/sw.js')
 def service_worker():

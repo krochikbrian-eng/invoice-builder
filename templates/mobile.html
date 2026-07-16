@@ -422,6 +422,19 @@
 </nav>
 
 <script>
+// ─── Company (scopes all API data; switch lives on desktop) ─────────────────
+let activeCompany = localStorage.getItem('activeCompany') || 'zero';
+if (activeCompany !== 'zero' && activeCompany !== 'lime') activeCompany = 'zero';
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+    try {
+        if (typeof url === 'string' && url.startsWith('/api/')) {
+            opts = { ...opts, headers: { ...(opts.headers || {}), 'X-Company': activeCompany } };
+        }
+    } catch (e) {}
+    return _origFetch(url, opts);
+};
+
 // ─── Copy Tracking ────────────────────────────────────────────────────────
 function copyItemTitle(itemId) {
     const item = allItems.find(i => i.id === itemId);
