@@ -269,7 +269,12 @@
             </div>
         </div>
         <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
-        <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-5" placeholder="TBA...">
+        <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="TBA...">
+        <label class="text-xs text-gray-400 block mb-1">Tipo</label>
+        <select id="mi-type" class="field w-full px-3 py-3 text-sm mb-5">
+            <option value="comercial">🏢 Comercial</option>
+            <option value="personal">👤 Personal</option>
+        </select>
         <div class="flex gap-3">
             <button onclick="closeManualItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
             <button id="mi-submit" onclick="submitManualItem()" class="flex-1 btn-primary py-3 rounded-xl text-sm">Agregar</button>
@@ -507,6 +512,7 @@ function openManualItemModal() {
     document.getElementById('mi-qty').value = '1';
     document.getElementById('mi-price').value = '';
     document.getElementById('mi-tracking').value = '';
+    document.getElementById('mi-type').value = 'comercial';
     document.getElementById('manual-item-modal').classList.add('open');
     setTimeout(() => document.getElementById('mi-title').focus(), 50);
 }
@@ -520,6 +526,7 @@ async function submitManualItem() {
     const qty = parseInt(document.getElementById('mi-qty').value);
     const price = parseFloat(document.getElementById('mi-price').value);
     const tracking = document.getElementById('mi-tracking').value.trim();
+    const item_type = document.getElementById('mi-type').value;
     if (!title) { toast('Ingresá un título', 'error'); return; }
     if (!qty || qty <= 0) { toast('Cantidad inválida', 'error'); return; }
     if (isNaN(price) || price < 0) { toast('Costo inválido', 'error'); return; }
@@ -529,7 +536,7 @@ async function submitManualItem() {
         const res = await fetch('/api/items/manual', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, qty, price, tracking })
+            body: JSON.stringify({ title, qty, price, tracking, item_type })
         });
         const data = await res.json();
         if (res.ok) {
@@ -896,6 +903,10 @@ function renderItems() {
                     <option value="pending" ${item.status==='pending'?'selected':''}>⏳ Pendiente</option>
                     <option value="invoiced" ${item.status==='invoiced'?'selected':''}>📄 Facturado${item.invoice_number?' #'+item.invoice_number:''}</option>
                     <option value="sent" ${item.status==='sent'?'selected':''}>✈️ Enviado</option>
+                </select>
+                <select onchange="changeItemType(${item.id}, this.value)" class="field text-xs py-2 ml-2" style="min-height:44px; font-size:0.75rem; padding-top:6px; padding-bottom:6px;" title="Tipo">
+                    <option value="comercial" ${item.item_type!=='personal'?'selected':''}>🏢 Comercial</option>
+                    <option value="personal" ${item.item_type==='personal'?'selected':''}>👤 Personal</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
@@ -1282,6 +1293,27 @@ async function changeItemStatus(itemId, newStatus) {
             loadItems();
         } else {
             toast(data.error || 'Error al cambiar estado', 'error');
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    }
+}
+
+async function changeItemType(itemId, newType) {
+    try {
+        const res = await fetch(`/api/items/${itemId}/type`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_type: newType })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            const it = allItems.find(i => i.id === itemId);
+            if (it) it.item_type = newType;
+            toast(newType === 'personal' ? '👤 Personal' : '🏢 Comercial', 'success');
+        } else {
+            toast(data.error || 'Error al cambiar tipo', 'error');
+            loadItems();
         }
     } catch (err) {
         toast('Error: ' + err.message, 'error');

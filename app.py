@@ -292,6 +292,12 @@ def init_db():
             conn.commit()
         except Exception:
             pass  # Column already exists
+    # Migration: add item_type column (comercial/personal); existing + CSV data = 'comercial'
+    try:
+        conn.execute("ALTER TABLE items ADD COLUMN item_type TEXT DEFAULT 'comercial'")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
@@ -301,6 +307,12 @@ def init_db():
         cleaned = clean_csv_value(row['tracking'])
         conn.execute("UPDATE items SET tracking = ? WHERE id = ?", (cleaned, row['id']))
     if rows:
+        conn.commit()
+    # Fix ASIN values stored with ="..." wrapper from Amazon CSV (numeric ISBN-style ASINs)
+    arows = conn.execute("SELECT id, asin FROM items WHERE asin LIKE '=\"%\"' OR asin LIKE '=\"%'").fetchall()
+    for row in arows:
+        conn.execute("UPDATE items SET asin = ? WHERE id = ?", (clean_csv_value(row['asin']), row['id']))
+    if arows:
         conn.commit()
     conn.close()
 
@@ -320,14 +332,18 @@ def clean_csv_value(val):
     """Clean Amazon Business CSV values like =\"99999\" or \"12.99\""""
     if val is None:
         return ''
-    val = val.strip()
-    # Remove ="" wrapper
-    if val.startswith('="') and val.endswith('"'):
-        val = val[2:-1]
-    # Remove surrounding quotes
-    if val.startswith('"') and val.endswith('"'):
+    val = str(val).strip()
+    # Remove Excel-style formula prefix (=), e.g. ="1338601296"
+    if val.startswith('='):
+        val = val[1:]
+    # Remove surrounding double quotes (paired or a leftover leading/trailing one)
+    if len(val) >= 2 and val.startswith('"') and val.endswith('"'):
         val = val[1:-1]
-    return val
+    elif val.startswith('"'):
+        val = val[1:]
+    elif val.endswith('"'):
+        val = val[:-1]
+    return val.strip()
 
 def parse_price(val):
     """Parse price string to float."""
@@ -369,7 +385,7 @@ def parse_csv(file_content, company='zero'):
         if not title:
             continue
 
-        asin = row.get('ASIN', '').strip()
+        asin = clean_csv_value(row.get('ASIN', ''))
         order_id = row.get('Id. de pedido', '').strip()
         tracking = clean_csv_value(row.get('N.º de seguimiento del transportista', ''))
         qty_str = row.get('Cantidad de artículos', '1')
@@ -1077,6 +1093,7 @@ def get_items():
             'invoice_id': row['invoice_id'],
             'invoice_number': row['invoice_number'],
             'multi_item': order_counts.get(row['order_id'], 0) > 1,
+            'item_type': (row['item_type'] if 'item_type' in row.keys() else 'comercial') or 'comercial',
         })
 
     conn.close()
@@ -1695,6 +1712,22 @@ def update_item_status(item_id):
     conn.close()
     return jsonify({'message': 'Status updated'})
 
+@app.route('/api/items/<int:item_id>/type', methods=['PUT'])
+def update_item_type(item_id):
+    """Change an item's type (comercial/personal)."""
+    data = request.json or {}
+    new_type = str(data.get('item_type', '')).strip().lower()
+    if new_type not in ('comercial', 'personal'):
+        return jsonify({'error': 'Tipo inválido'}), 400
+    conn = get_db()
+    if conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        conn.close()
+        return jsonify({'error': 'Item no encontrado'}), 404
+    conn.execute("UPDATE items SET item_type = ? WHERE id = ?", (new_type, item_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Tipo actualizado', 'item_type': new_type})
+
 @app.route('/api/invoices/<int:invoice_id>', methods=['DELETE'])
 def delete_invoice(invoice_id):
     """Delete an invoice and return its items to pending."""
@@ -1732,13 +1765,16 @@ def add_manual_item():
     if price < 0:
         return jsonify({'error': 'El costo no puede ser negativo'}), 400
     company = get_company()
+    item_type = str(data.get('item_type', 'comercial')).strip().lower()
+    if item_type not in ('comercial', 'personal'):
+        item_type = 'comercial'
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
     conn = get_db()
     cur = conn.execute("""
-        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company)
-        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?)
-    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company))
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company, item_type)
+        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?, ?)
+    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company, item_type))
     conn.commit()
     new_id = cur.lastrowid
     conn.close()

@@ -214,10 +214,19 @@
                                onkeydown="if(event.key==='Enter')submitManualItem()">
                     </div>
                 </div>
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
-                    <input id="mi-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="TBA..."
-                           onkeydown="if(event.key==='Enter')submitManualItem()">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
+                        <input id="mi-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="TBA..."
+                               onkeydown="if(event.key==='Enter')submitManualItem()">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Tipo</label>
+                        <select id="mi-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
+                            <option value="comercial">🏢 Comercial</option>
+                            <option value="personal">👤 Personal</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="flex gap-3 justify-end mt-5">
@@ -967,6 +976,11 @@
                                 <option value="invoiced" ${item.status === 'invoiced' ? 'selected' : ''}>📄 Facturado${item.invoice_number ? ' #'+item.invoice_number : ''}</option>
                                 <option value="sent" ${item.status === 'sent' ? 'selected' : ''}>✈️ Enviado</option>
                             </select>
+                            <select onclick="event.stopPropagation()" onchange="changeItemType(${item.id}, this.value)"
+                                    class="field text-xs px-2 py-1 cursor-pointer" title="Tipo de ítem">
+                                <option value="comercial" ${item.item_type !== 'personal' ? 'selected' : ''}>🏢 Comercial</option>
+                                <option value="personal" ${item.item_type === 'personal' ? 'selected' : ''}>👤 Personal</option>
+                            </select>
                             ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
                         </div>
                         <div class="flex items-center gap-2">
@@ -1079,6 +1093,7 @@
         document.getElementById('mi-qty').value = '1';
         document.getElementById('mi-price').value = '';
         document.getElementById('mi-tracking').value = '';
+        document.getElementById('mi-type').value = 'comercial';
         const modal = document.getElementById('manual-item-modal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1096,6 +1111,7 @@
         const qty = parseInt(document.getElementById('mi-qty').value);
         const price = parseFloat(document.getElementById('mi-price').value);
         const tracking = document.getElementById('mi-tracking').value.trim();
+        const item_type = document.getElementById('mi-type').value;
         if (!title) { toast('Ingresá un título', 'warning'); return; }
         if (!qty || qty <= 0) { toast('Cantidad inválida', 'warning'); return; }
         if (isNaN(price) || price < 0) { toast('Costo inválido', 'warning'); return; }
@@ -1105,7 +1121,7 @@
             const res = await fetch('/api/items/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, qty, price, tracking })
+                body: JSON.stringify({ title, qty, price, tracking, item_type })
             });
             const data = await res.json();
             if (res.ok) {
@@ -1537,6 +1553,27 @@
                 loadItems();
             } else {
                 toast(data.error || 'Error al cambiar estado', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        }
+    }
+
+    async function changeItemType(itemId, newType) {
+        try {
+            const res = await fetch(`/api/items/${itemId}/type`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ item_type: newType })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const it = allItems.find(i => i.id === itemId);
+                if (it) it.item_type = newType;
+                toast(`Tipo: ${newType === 'personal' ? '👤 Personal' : '🏢 Comercial'}`, 'success');
+            } else {
+                toast(data.error || 'Error al cambiar tipo', 'error');
+                loadItems();
             }
         } catch (err) {
             toast('Error: ' + err.message, 'error');
