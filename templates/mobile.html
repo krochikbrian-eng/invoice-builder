@@ -282,6 +282,22 @@
     </div>
 </div>
 
+<!-- Edit item modal -->
+<div id="edit-item-modal" class="modal-overlay" onclick="if(event.target===this)closeEditItemModal()">
+    <div class="card p-5 w-full max-w-sm">
+        <h3 class="font-bold text-base mb-4">✏️ Editar ítem</h3>
+        <input type="hidden" id="ei-id">
+        <label class="text-xs text-gray-400 block mb-1">Título</label>
+        <input id="ei-title" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="Título del ítem">
+        <label class="text-xs text-gray-400 block mb-1">Tracking</label>
+        <input id="ei-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-5" placeholder="Tracking">
+        <div class="flex gap-3">
+            <button onclick="closeEditItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
+            <button id="ei-submit" onclick="submitEditItem()" class="flex-1 btn-primary py-3 rounded-xl text-sm">Guardar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Mobile Header -->
 <header class="mobile-header">
     <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
@@ -524,6 +540,51 @@ function openManualItemModal() {
 
 function closeManualItemModal() {
     document.getElementById('manual-item-modal').classList.remove('open');
+}
+
+// ─── Edit item ──────────────────────────────────────────────────────────────
+function openEditItemModal(itemId) {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+    document.getElementById('ei-id').value = itemId;
+    document.getElementById('ei-title').value = item.title || '';
+    document.getElementById('ei-tracking').value = item.tracking || '';
+    document.getElementById('edit-item-modal').classList.add('open');
+    setTimeout(() => document.getElementById('ei-title').focus(), 50);
+}
+
+function closeEditItemModal() {
+    document.getElementById('edit-item-modal').classList.remove('open');
+}
+
+async function submitEditItem() {
+    const id = parseInt(document.getElementById('ei-id').value);
+    const title = document.getElementById('ei-title').value.trim();
+    const tracking = document.getElementById('ei-tracking').value.trim();
+    if (!title) { toast('El título no puede estar vacío', 'error'); return; }
+    const btn = document.getElementById('ei-submit');
+    btn.disabled = true; btn.textContent = 'Guardando...';
+    try {
+        const res = await fetch(`/api/items/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, tracking })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            toast('Ítem actualizado', 'success');
+            closeEditItemModal();
+            const boxEntry = boxItems.get(id);
+            if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; if (typeof renderBox === 'function') renderBox(); }
+            loadItems();
+        } else {
+            toast(data.error || 'Error al guardar', 'error');
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Guardar';
+    }
 }
 
 async function submitManualItem() {
@@ -917,6 +978,7 @@ function renderItems() {
                     <option value="personal" ${item.item_type==='personal'?'selected':''}>👤 Personal</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
+                    <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>

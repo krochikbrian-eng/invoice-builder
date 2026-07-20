@@ -236,6 +236,29 @@
         </div>
     </div>
 
+    <!-- Edit item modal -->
+    <div id="edit-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeEditItemModal()">
+        <div class="card p-6 mx-auto w-full max-w-md anim-in">
+            <h3 class="text-lg font-semibold mb-4">✏️ Editar ítem</h3>
+            <input type="hidden" id="ei-id">
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Título</label>
+                    <input id="ei-title" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Título del ítem">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 block mb-1">Tracking</label>
+                    <input id="ei-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Tracking"
+                           onkeydown="if(event.key==='Enter')submitEditItem()">
+                </div>
+            </div>
+            <div class="flex gap-3 justify-end mt-5">
+                <button onclick="closeEditItemModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
+                <button id="ei-submit" onclick="submitEditItem()" class="btn-primary px-4 py-2 rounded-lg text-sm">Guardar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Items to Invoice modal -->
     <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeAddItemsModal()">
         <div class="card p-6 mx-auto w-full max-w-2xl anim-in" style="max-height:85vh;display:flex;flex-direction:column;">
@@ -947,7 +970,7 @@
                     <div class="flex justify-between items-start gap-3">
                         <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title copyable"
                            title="Click para copiar el título completo"
-                           onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}${copyIcon}</p>
+                           onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}</p>
                         <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">${fmtMoney(total)}</span>
                     </div>
                     <!-- Row 2: Metadata grid -->
@@ -990,6 +1013,12 @@
                                 <option value="personal" ${item.item_type === 'personal' ? 'selected' : ''}>👤 Personal</option>
                             </select>
                             ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
+                            <button onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Copiar título">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                            <button onclick="event.stopPropagation(); openEditItemModal(${item.id})" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Editar título y tracking">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            </button>
                         </div>
                         <div class="flex items-center gap-2">
                             ${!isUsed && !inBox ? `<button onclick="event.stopPropagation(); addToBox(${item.id})" class="text-xs btn-primary px-3 py-1.5 rounded-md font-medium">+ Agregar</button>` : ''}
@@ -1121,6 +1150,56 @@
         const modal = document.getElementById('manual-item-modal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+    }
+
+    // ─── Edit item ──────────────────────────────────────────────────────
+    function openEditItemModal(itemId) {
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) return;
+        document.getElementById('ei-id').value = itemId;
+        document.getElementById('ei-title').value = item.title || '';
+        document.getElementById('ei-tracking').value = item.tracking || '';
+        const modal = document.getElementById('edit-item-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => document.getElementById('ei-title').focus(), 50);
+    }
+
+    function closeEditItemModal() {
+        const modal = document.getElementById('edit-item-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    async function submitEditItem() {
+        const id = parseInt(document.getElementById('ei-id').value);
+        const title = document.getElementById('ei-title').value.trim();
+        const tracking = document.getElementById('ei-tracking').value.trim();
+        if (!title) { toast('El título no puede estar vacío', 'warning'); return; }
+        const btn = document.getElementById('ei-submit');
+        btn.disabled = true; btn.textContent = 'Guardando...';
+        try {
+            const res = await fetch(`/api/items/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, tracking })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast('Ítem actualizado', 'success');
+                closeEditItemModal();
+                // reflect in box if present
+                const boxEntry = boxItems.get(id);
+                if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; renderBox(); }
+                loadItems();
+            } else {
+                toast(data.error || 'Error al guardar', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false; btn.textContent = 'Guardar';
+        }
     }
 
     async function submitManualItem() {

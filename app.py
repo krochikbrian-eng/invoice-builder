@@ -1712,6 +1712,34 @@ def update_item_status(item_id):
     conn.close()
     return jsonify({'message': 'Status updated'})
 
+@app.route('/api/items/<int:item_id>', methods=['PATCH'])
+def update_item_fields(item_id):
+    """Edit an item's title and/or tracking."""
+    data = request.json or {}
+    conn = get_db()
+    row = conn.execute("SELECT id, order_id FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        conn.close()
+        return jsonify({'error': 'Item no encontrado'}), 404
+    sets, params = [], []
+    if 'title' in data:
+        title = str(data.get('title', '')).strip()
+        if not title:
+            conn.close()
+            return jsonify({'error': 'El título no puede estar vacío'}), 400
+        sets.append('title = ?'); params.append(title)
+    if 'tracking' in data:
+        tracking = str(data.get('tracking', '')).strip()
+        sets.append('tracking = ?'); params.append(tracking)
+    if not sets:
+        conn.close()
+        return jsonify({'error': 'Nada para actualizar'}), 400
+    params.append(item_id)
+    conn.execute(f"UPDATE items SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Ítem actualizado'})
+
 @app.route('/api/items/<int:item_id>/type', methods=['PUT'])
 def update_item_type(item_id):
     """Change an item's type (comercial/personal)."""
