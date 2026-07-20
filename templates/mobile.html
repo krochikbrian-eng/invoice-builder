@@ -348,6 +348,11 @@
                     <option value="invoiced">Facturado</option>
                     <option value="sent">Enviado</option>
                 </select>
+                <select id="filter-type" class="field" onchange="filterItems()">
+                    <option value="all" selected>Todos</option>
+                    <option value="comercial">🏢 Comercial</option>
+                    <option value="personal">👤 Personal</option>
+                </select>
             </div>
 
             <div id="items-list">
@@ -795,6 +800,7 @@ function confirmDialog({ title = '¿Confirmar?', message = '', confirmText = 'Ac
         const cancelBtn = document.getElementById('confirm-modal-cancel');
         okBtn.textContent = confirmText;
         cancelBtn.textContent = cancelText;
+        cancelBtn.style.display = cancelText ? '' : 'none';
         modal.classList.add('open');
         const cleanup = (val) => {
             modal.classList.remove('open');
@@ -852,6 +858,7 @@ function filterItems() { renderItems(); }
 function renderItems() {
     const search = document.getElementById('search-items').value.toLowerCase();
     const statusFilter = document.getElementById('filter-status').value;
+    const typeFilter = document.getElementById('filter-type')?.value || 'all';
     const list = document.getElementById('items-list');
 
     // Pending counter in title
@@ -861,6 +868,7 @@ function renderItems() {
 
     const filtered = allItems.filter(item => {
         if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+        if (typeFilter !== 'all' && (item.item_type || 'comercial') !== typeFilter) return false;
         if (search && !item.title.toLowerCase().includes(search) &&
             !item.order_id.toLowerCase().includes(search) &&
             !(item.asin && item.asin.toLowerCase().includes(search))) return false;
@@ -923,10 +931,27 @@ function getDiscount() {
 }
 
 // ─── Box ──────────────────────────────────────────────────────────────────
+function boxType() {
+    for (const { item } of boxItems.values()) return item.item_type || 'comercial';
+    return null;
+}
+function typeLabel(t) { return t === 'personal' ? 'PERSONAL' : 'COMERCIAL'; }
+
 function addToBox(itemId) {
     if (boxItems.has(itemId)) return;
     const item = allItems.find(i => i.id === itemId);
     if (!item || item.status !== 'pending') return;
+    const itType = item.item_type || 'comercial';
+    const bt = boxType();
+    if (bt && bt !== itType) {
+        confirmDialog({
+            title: `Envío ${typeLabel(bt)}`,
+            message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar ítems personales y comerciales en el mismo envío. Vaciá la caja antes de agregar ítems ${typeLabel(itType)}.`,
+            confirmText: 'Entendido',
+            cancelText: ''
+        });
+        return;
+    }
     boxItems.set(itemId, { item, qty: item.qty });
     renderBox();
     renderItems();

@@ -350,6 +350,11 @@
                             <option value="invoiced">Facturado</option>
                             <option value="sent">Enviado</option>
                         </select>
+                        <select id="filter-type" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
+                            <option value="all" selected>Todos</option>
+                            <option value="comercial">🏢 Comercial</option>
+                            <option value="personal">👤 Personal</option>
+                        </select>
                         <select id="sort-items" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
                             <option value="default">Orden original</option>
                             <option value="date_desc">Fecha ↓ (reciente)</option>
@@ -785,6 +790,7 @@
             okBtn.textContent = confirmText;
             okBtn.className = `${confirmClass} px-4 py-2 rounded-lg text-sm`;
             cancelBtn.textContent = cancelText;
+            cancelBtn.style.display = cancelText ? '' : 'none';
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             const cleanup = (val) => {
@@ -884,6 +890,7 @@
     function renderItems() {
         const search = document.getElementById('search-items').value.toLowerCase();
         const statusFilter = document.getElementById('filter-status').value;
+        const typeFilter = document.getElementById('filter-type')?.value || 'all';
         const sortBy = document.getElementById('sort-items')?.value || 'default';
         const list = document.getElementById('items-list');
 
@@ -892,6 +899,7 @@
 
         let filtered = allItems.filter(item => {
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
+            if (typeFilter !== 'all' && (item.item_type || 'comercial') !== typeFilter) return false;
             if (search && !item.title.toLowerCase().includes(search) &&
                 !item.order_id.toLowerCase().includes(search) &&
                 !(item.tracking && item.tracking.toLowerCase().includes(search)) &&
@@ -1065,18 +1073,27 @@
     function bulkAddToBox() {
         if (selectedItems.size === 0) return;
         const ids = [...selectedItems];
-        let added = 0, skipped = 0;
+        let targetType = boxType();
+        let added = 0, skipped = 0, skippedType = 0;
         ids.forEach(id => {
             const item = allItems.find(i => i.id === id);
-            if (item && item.status === 'pending' && !boxItems.has(id)) {
-                boxItems.set(id, { item, qty: item.qty });
-                added++;
-            } else {
-                skipped++;
-            }
+            if (!item || item.status !== 'pending' || boxItems.has(id)) { skipped++; return; }
+            const itType = item.item_type || 'comercial';
+            if (targetType === null) targetType = itType; // el primero define el tipo del envío
+            if (itType !== targetType) { skippedType++; return; }
+            boxItems.set(id, { item, qty: item.qty });
+            added++;
         });
-        if (added > 0) {
-            renderBox();
+        if (added > 0) renderBox();
+        if (skippedType > 0) {
+            confirmDialog({
+                title: `Envío ${typeLabel(targetType)}`,
+                message: `Este envío es ${typeLabel(targetType)}.\n\n${skippedType} ítem(s) del otro tipo no se agregaron. No se pueden mezclar ítems personales y comerciales en el mismo envío.${added ? `\n\nSe agregaron ${added} ítem(s) ${typeLabel(targetType)}.` : ''}`,
+                confirmText: 'Entendido',
+                cancelText: '',
+                icon: targetType === 'personal' ? '👤' : '🏢'
+            });
+        } else if (added > 0) {
             toast(skipped > 0
                 ? `${added} ítem(s) agregados a la caja · ${skipped} omitidos (no pendientes o ya en caja)`
                 : `${added} ítem(s) agregados a la caja`, 'success');
@@ -1157,10 +1174,29 @@
         });
     }
 
+    // Tipo del envío en curso (el de sus ítems). null si la caja está vacía.
+    function boxType() {
+        for (const { item } of boxItems.values()) return item.item_type || 'comercial';
+        return null;
+    }
+    function typeLabel(t) { return t === 'personal' ? 'PERSONAL' : 'COMERCIAL'; }
+
     function addToBox(itemId) {
         if (boxItems.has(itemId)) return;
         const item = allItems.find(i => i.id === itemId);
         if (!item || item.status !== 'pending') return;
+        const itType = item.item_type || 'comercial';
+        const bt = boxType();
+        if (bt && bt !== itType) {
+            confirmDialog({
+                title: `Envío ${typeLabel(bt)}`,
+                message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar ítems personales y comerciales en el mismo envío. Vaciá la caja (o generá el invoice) antes de agregar ítems ${typeLabel(itType)}.`,
+                confirmText: 'Entendido',
+                cancelText: '',
+                icon: bt === 'personal' ? '👤' : '🏢'
+            });
+            return;
+        }
         boxItems.set(itemId, { item, qty: item.qty });
         renderBox();
         renderItems();
