@@ -154,16 +154,56 @@ def _get_mailgun(company=None):
     base = 'https://api.eu.mailgun.net' if region == 'eu' else 'https://api.mailgun.net'
     return api_key, domain, from_email, base
 
+def _get_resend(company=None):
+    """Return (api_key, from_email) for Resend."""
+    cc = company_cfg(company)
+    api_key = cc.get('resend_api_key', '') or os.environ.get('RESEND_API_KEY', '')
+    from_email = cc.get('resend_from', '') or os.environ.get('RESEND_FROM', '')
+    return api_key, from_email
+
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None, company: str = 'zero'):
+    rs_key, rs_from = _get_resend(company)
     mg_key, mg_domain, _mg_from, _mg_base = _get_mailgun(company)
     sg_key = _get_sendgrid_key(company)
-    if mg_key and mg_domain:
+    if rs_key and rs_from:
+        _send_via_resend(company, files, to_email, subject, body, zip_data, zip_filename)
+    elif mg_key and mg_domain:
         _send_via_mailgun(company, files, to_email, subject, body, zip_data, zip_filename)
     elif sg_key:
         _send_via_sendgrid(sg_key, company, files, to_email, subject, body, zip_data, zip_filename)
     else:
         _send_via_smtp(company_cfg(company), files, to_email, subject, body, zip_data, zip_filename)
+
+def _send_via_resend(company: str, files: list, to_email: str, subject: str, body: str,
+                     zip_data=None, zip_filename=None):
+    api_key, from_email = _get_resend(company)
+    if not api_key:
+        raise ValueError("Resend no configurado (falta API key)")
+    if not from_email:
+        raise ValueError("Falta el remitente (From) de Resend — cargalo en Configuración")
+    attachments = []
+    if zip_data and not files:
+        attachments.append({'filename': zip_filename or 'invoice.zip',
+                            'content': base64.b64encode(zip_data).decode()})
+    else:
+        for fn, data, mt in files:
+            attachments.append({'filename': fn, 'content': base64.b64encode(data).decode()})
+    msg = {'from': from_email, 'to': [to_email], 'subject': subject, 'text': body}
+    if attachments:
+        msg['attachments'] = attachments
+    payload = _json.dumps(msg).encode()
+    req = urllib.request.Request('https://api.resend.com/emails', data=payload, headers={
+        'Authorization': f'Bearer {api_key}',
+        'Content-Type': 'application/json',
+    }, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 201, 202):
+                raise ValueError(f"Resend error {resp.status}: {resp.read().decode('utf-8', 'replace')}")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode('utf-8', errors='replace')
+        raise ValueError(f"Resend {e.code}: {detail}")
 
 def _send_via_mailgun(company: str, files: list, to_email: str, subject: str, body: str,
                       zip_data=None, zip_filename=None):
@@ -2028,23 +2068,22 @@ def test_smtp_config():
 @app.route('/api/config/resend', methods=['GET'])
 def get_resend_config():
     company = get_company()
-    return jsonify({
-        'api_key_set': bool(_get_sendgrid_key(company)),
-        'from_email': _get_sendgrid_from(company),
-    })
+    api_key, from_email = _get_resend(company)
+    return jsonify({'api_key_set': bool(api_key), 'from_email': from_email})
 
 @app.route('/api/config/resend', methods=['PUT'])
 def set_resend_config():
-    data = request.get_json()
+    data = request.get_json() or {}
     company = get_company()
     full = load_config()
     cc = full['companies'][company]
     if 'api_key' in data and data['api_key']:
-        cc['sendgrid_api_key'] = str(data['api_key']).strip()
+        cc['resend_api_key'] = str(data['api_key']).strip()
     if 'from_email' in data:
-        cc['sendgrid_from'] = str(data['from_email']).strip()
+        cc['resend_from'] = str(data['from_email']).strip()
     save_config(full)
-    return jsonify({'ok': True, 'api_key_set': bool(_get_sendgrid_key(company)), 'from_email': _get_sendgrid_from(company)})
+    api_key, from_email = _get_resend(company)
+    return jsonify({'ok': True, 'api_key_set': bool(api_key), 'from_email': from_email})
 
 @app.route('/api/config/mailgun', methods=['GET'])
 def get_mailgun_config():
