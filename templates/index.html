@@ -1702,7 +1702,8 @@
             if (res.ok) {
                 const it = allItems.find(i => i.id === itemId);
                 if (it) it.item_type = newType;
-                toast(`Tipo: ${{comercial:'🏢 Comercial', personal:'👤 Personal', revisar:'🔎 Revisar'}[newType] || newType}`, 'success');
+                const _tl = {comercial:'🏢 Comercial', personal:'👤 Personal', revisar:'🔎 Revisar'}[newType] || newType;
+                toast('Tipo: ' + _tl, 'success');
             } else {
                 toast(data.error || 'Error al cambiar tipo', 'error');
                 loadItems();
