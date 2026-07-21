@@ -274,6 +274,7 @@
         <select id="mi-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
             <option value="personal">👤 Personal</option>
+            <option value="revisar">🔎 Revisar</option>
         </select>
         <div class="flex gap-3">
             <button onclick="closeManualItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
@@ -305,6 +306,7 @@
         <select id="ei-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
             <option value="personal">👤 Personal</option>
+            <option value="revisar">🔎 Revisar</option>
         </select>
         <div class="flex gap-3">
             <button onclick="closeEditItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
@@ -383,6 +385,7 @@
                     <option value="all" selected>Todos</option>
                     <option value="comercial">🏢 Comercial</option>
                     <option value="personal">👤 Personal</option>
+                    <option value="revisar">🔎 Revisar</option>
                 </select>
             </div>
 
@@ -978,8 +981,9 @@ function renderItems() {
                     <option value="sent" ${item.status==='sent'?'selected':''}>✈️ Enviado</option>
                 </select>
                 <select onchange="changeItemType(${item.id}, this.value)" class="field text-xs py-2 ml-2" style="min-height:44px; font-size:0.75rem; padding-top:6px; padding-bottom:6px;" title="Tipo">
-                    <option value="comercial" ${item.item_type!=='personal'?'selected':''}>🏢 Comercial</option>
+                    <option value="comercial" ${(item.item_type||'comercial')==='comercial'?'selected':''}>🏢 Comercial</option>
                     <option value="personal" ${item.item_type==='personal'?'selected':''}>👤 Personal</option>
+                    <option value="revisar" ${item.item_type==='revisar'?'selected':''}>🔎 Revisar</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
@@ -1401,7 +1405,7 @@ async function changeItemType(itemId, newType) {
         if (res.ok) {
             const it = allItems.find(i => i.id === itemId);
             if (it) it.item_type = newType;
-            toast(newType === 'personal' ? '👤 Personal' : '🏢 Comercial', 'success');
+            toast({comercial:'🏢 Comercial', personal:'👤 Personal', revisar:'🔎 Revisar'}[newType] || newType, 'success');
         } else {
             toast(data.error || 'Error al cambiar tipo', 'error');
             loadItems();

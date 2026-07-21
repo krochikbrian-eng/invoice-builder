@@ -225,6 +225,7 @@
                         <select id="mi-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
+                            <option value="revisar">🔎 Revisar</option>
                         </select>
                     </div>
                 </div>
@@ -269,6 +270,7 @@
                         <select id="ei-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
+                            <option value="revisar">🔎 Revisar</option>
                         </select>
                     </div>
                 </div>
@@ -398,6 +400,7 @@
                             <option value="all" selected>Todos</option>
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
+                            <option value="revisar">🔎 Revisar</option>
                         </select>
                         <select id="sort-items" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
                             <option value="default">Orden original</option>
@@ -1014,8 +1017,9 @@
                             </select>
                             <select onclick="event.stopPropagation()" onchange="changeItemType(${item.id}, this.value)"
                                     class="field text-xs px-2 py-1 cursor-pointer" title="Tipo de ítem">
-                                <option value="comercial" ${item.item_type !== 'personal' ? 'selected' : ''}>🏢 Comercial</option>
+                                <option value="comercial" ${(item.item_type || 'comercial') === 'comercial' ? 'selected' : ''}>🏢 Comercial</option>
                                 <option value="personal" ${item.item_type === 'personal' ? 'selected' : ''}>👤 Personal</option>
+                                <option value="revisar" ${item.item_type === 'revisar' ? 'selected' : ''}>🔎 Revisar</option>
                             </select>
                             ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
                             <button onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Copiar título">
@@ -1698,7 +1702,7 @@
             if (res.ok) {
                 const it = allItems.find(i => i.id === itemId);
                 if (it) it.item_type = newType;
-                toast(`Tipo: ${newType === 'personal' ? '👤 Personal' : '🏢 Comercial'}`, 'success');
+                toast(`Tipo: ${{comercial:'🏢 Comercial', personal:'👤 Personal', revisar:'🔎 Revisar'}[newType] || newType}`, 'success');
             } else {
                 toast(data.error || 'Error al cambiar tipo', 'error');
                 loadItems();
