@@ -9,7 +9,9 @@ import sqlite3
 import zipfile
 import smtplib
 import base64
+import uuid
 import urllib.request
+import urllib.error
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -142,13 +144,69 @@ def _get_sendgrid_key(company=None):
 def _get_sendgrid_from(company=None):
     return (company_cfg(company).get('sendgrid_from', '') or os.environ.get('SENDGRID_FROM', ''))
 
+def _get_mailgun(company=None):
+    """Return (api_key, domain, from_email, base_url) for Mailgun."""
+    cc = company_cfg(company)
+    api_key = cc.get('mailgun_api_key', '') or os.environ.get('MAILGUN_API_KEY', '')
+    domain = cc.get('mailgun_domain', '') or os.environ.get('MAILGUN_DOMAIN', '')
+    from_email = cc.get('mailgun_from', '') or os.environ.get('MAILGUN_FROM', '')
+    region = (cc.get('mailgun_region', '') or os.environ.get('MAILGUN_REGION', 'us')).lower()
+    base = 'https://api.eu.mailgun.net' if region == 'eu' else 'https://api.mailgun.net'
+    return api_key, domain, from_email, base
+
 def send_email_with_attachments(files: list, to_email: str, subject: str, body: str,
                                   zip_data: bytes = None, zip_filename: str = None, company: str = 'zero'):
+    mg_key, mg_domain, _mg_from, _mg_base = _get_mailgun(company)
     sg_key = _get_sendgrid_key(company)
-    if sg_key:
+    if mg_key and mg_domain:
+        _send_via_mailgun(company, files, to_email, subject, body, zip_data, zip_filename)
+    elif sg_key:
         _send_via_sendgrid(sg_key, company, files, to_email, subject, body, zip_data, zip_filename)
     else:
         _send_via_smtp(company_cfg(company), files, to_email, subject, body, zip_data, zip_filename)
+
+def _send_via_mailgun(company: str, files: list, to_email: str, subject: str, body: str,
+                      zip_data=None, zip_filename=None):
+    api_key, domain, from_email, base = _get_mailgun(company)
+    if not api_key or not domain:
+        raise ValueError("Mailgun no configurado (falta API key o dominio)")
+    if not from_email:
+        raise ValueError("Falta el remitente (From) de Mailgun — cargalo en Configuración")
+    url = f"{base}/v3/{domain}/messages"
+    boundary = uuid.uuid4().hex
+    parts = []
+    def add_field(name, value):
+        parts.append((f'--{boundary}\r\n'
+                      f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                      f'{value}\r\n').encode('utf-8'))
+    add_field('from', from_email)
+    add_field('to', to_email)
+    add_field('subject', subject)
+    add_field('text', body)
+    if zip_data and not files:
+        attachments = [(zip_filename or 'invoice.zip', zip_data, 'application/zip')]
+    else:
+        attachments = [(fn, data, mt) for (fn, data, mt) in files]
+    for fn, data, mt in attachments:
+        parts.append((f'--{boundary}\r\n'
+                      f'Content-Disposition: form-data; name="attachment"; filename="{fn}"\r\n'
+                      f'Content-Type: {mt}\r\n\r\n').encode('utf-8'))
+        parts.append(data)
+        parts.append(b'\r\n')
+    parts.append(f'--{boundary}--\r\n'.encode('utf-8'))
+    payload = b''.join(parts)
+    auth = base64.b64encode(f'api:{api_key}'.encode()).decode()
+    req = urllib.request.Request(url, data=payload, headers={
+        'Authorization': f'Basic {auth}',
+        'Content-Type': f'multipart/form-data; boundary={boundary}',
+    }, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 201, 202):
+                raise ValueError(f"Mailgun error {resp.status}: {resp.read().decode('utf-8', 'replace')}")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode('utf-8', errors='replace')
+        raise ValueError(f"Mailgun {e.code}: {detail}")
 
 def _send_via_sendgrid(api_key: str, company: str, files: list, to_email: str,
                        subject: str, body: str, zip_data=None, zip_filename=None):
@@ -1987,6 +2045,37 @@ def set_resend_config():
         cc['sendgrid_from'] = str(data['from_email']).strip()
     save_config(full)
     return jsonify({'ok': True, 'api_key_set': bool(_get_sendgrid_key(company)), 'from_email': _get_sendgrid_from(company)})
+
+@app.route('/api/config/mailgun', methods=['GET'])
+def get_mailgun_config():
+    company = get_company()
+    api_key, domain, from_email, _ = _get_mailgun(company)
+    cc = company_cfg(company)
+    return jsonify({
+        'api_key_set': bool(api_key),
+        'domain': domain,
+        'from_email': from_email,
+        'region': cc.get('mailgun_region', 'us'),
+    })
+
+@app.route('/api/config/mailgun', methods=['PUT'])
+def set_mailgun_config():
+    data = request.get_json() or {}
+    company = get_company()
+    full = load_config()
+    cc = full['companies'][company]
+    if 'api_key' in data and data['api_key']:
+        cc['mailgun_api_key'] = str(data['api_key']).strip()
+    if 'domain' in data:
+        cc['mailgun_domain'] = str(data['domain']).strip()
+    if 'from_email' in data:
+        cc['mailgun_from'] = str(data['from_email']).strip()
+    if 'region' in data:
+        cc['mailgun_region'] = 'eu' if str(data['region']).lower() == 'eu' else 'us'
+    save_config(full)
+    api_key, domain, from_email, _ = _get_mailgun(company)
+    return jsonify({'ok': True, 'api_key_set': bool(api_key), 'domain': domain,
+                    'from_email': from_email, 'region': cc.get('mailgun_region', 'us')})
 
 @app.route('/sw.js')
 def service_worker():

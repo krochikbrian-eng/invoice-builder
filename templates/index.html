@@ -540,10 +540,48 @@
                     <span id="email-config-status" class="text-xs text-gray-500 mt-1 block"></span>
                 </div>
 
+                <!-- Mailgun (proveedor recomendado) -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">📧 Configuración de Email (Mailgun)</h3>
+                    <p class="text-xs text-gray-400 mb-3">Proveedor recomendado (funciona en Railway). Creá tu cuenta en <a href="https://mailgun.com" target="_blank" class="text-blue-400 underline">mailgun.com</a>, verificá tu dominio y pegá acá tu API Key y dominio.</p>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">API Key</label>
+                            <input type="password" id="mg-api-key" placeholder="key-xxxxxxxx o el Sending API key"
+                                   class="field w-full px-3 py-2 text-sm">
+                            <span id="mg-key-status" class="text-xs text-gray-500 mt-1 block"></span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">Dominio</label>
+                                <input type="text" id="mg-domain" placeholder="mg.tudominio.com"
+                                       class="field w-full px-3 py-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">Región</label>
+                                <select id="mg-region" class="field w-full px-3 py-2 text-sm cursor-pointer">
+                                    <option value="us">US (api.mailgun.net)</option>
+                                    <option value="eu">EU (api.eu.mailgun.net)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">Email remitente (From)</label>
+                            <input type="text" id="mg-from" placeholder="Zero <no-reply@mg.tudominio.com>"
+                                   class="field w-full px-3 py-2 text-sm">
+                        </div>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <button onclick="saveMailgunConfig()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
+                            <button onclick="testSmtpConfig()" class="px-4 py-2 rounded-md text-sm font-medium bg-gray-600 hover:bg-gray-500 text-white">Probar conexión</button>
+                            <span id="mg-save-status" class="text-xs text-gray-500"></span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- SendGrid -->
                 <div class="card p-5">
                     <button onclick="toggleSmtp()" class="w-full text-left flex items-center justify-between">
-                        <h3 class="text-sm font-semibold text-gray-300">📧 Configuración de Email (SendGrid)</h3>
+                        <h3 class="text-sm font-semibold text-gray-300">📧 Configuración de Email (SendGrid — alternativa)</h3>
                         <span id="smtp-toggle-icon" class="text-gray-400 text-xs">▼ Expandir</span>
                     </button>
                     <div id="smtp-section" class="hidden mt-3 space-y-3">
@@ -742,6 +780,48 @@
             }
             if (data.from_email) document.getElementById('resend-from').value = data.from_email;
         } catch(e) {}
+        loadMailgunConfig();
+    }
+
+    async function loadMailgunConfig() {
+        try {
+            const res = await fetch('/api/config/mailgun');
+            const data = await res.json();
+            const st = document.getElementById('mg-key-status');
+            if (data.api_key_set) {
+                st.textContent = 'API Key: Configurado ✓';
+                document.getElementById('mg-api-key').placeholder = '••••••  (dejar vacío para no cambiar)';
+            } else { st.textContent = ''; }
+            if (data.domain) document.getElementById('mg-domain').value = data.domain;
+            if (data.from_email) document.getElementById('mg-from').value = data.from_email;
+            document.getElementById('mg-region').value = data.region || 'us';
+        } catch(e) {}
+    }
+
+    async function saveMailgunConfig() {
+        const apiKey = document.getElementById('mg-api-key').value.trim();
+        const domain = document.getElementById('mg-domain').value.trim();
+        const from_email = document.getElementById('mg-from').value.trim();
+        const region = document.getElementById('mg-region').value;
+        try {
+            const body = { domain, from_email, region };
+            if (apiKey) body.api_key = apiKey;
+            const res = await fetch('/api/config/mailgun', {
+                method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast('Mailgun guardado', 'success');
+                document.getElementById('mg-save-status').textContent = 'Guardado ✓';
+                document.getElementById('mg-api-key').value = '';
+                if (data.api_key_set) {
+                    document.getElementById('mg-key-status').textContent = 'API Key: Configurado ✓';
+                    document.getElementById('mg-api-key').placeholder = '••••••  (dejar vacío para no cambiar)';
+                }
+            } else {
+                toast(data.error || 'Error al guardar', 'error');
+            }
+        } catch(e) { toast('Error: ' + e.message, 'error'); }
     }
 
     async function testSmtpConfig() {
