@@ -246,10 +246,31 @@
                     <label class="text-xs text-gray-400 block mb-1">Título</label>
                     <input id="ei-title" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Título del ítem">
                 </div>
-                <div>
-                    <label class="text-xs text-gray-400 block mb-1">Tracking</label>
-                    <input id="ei-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Tracking"
-                           onkeydown="if(event.key==='Enter')submitEditItem()">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Cantidad</label>
+                        <input id="ei-qty" type="number" min="1" class="field w-full px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')submitEditItem()">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Precio (c/u)</label>
+                        <input id="ei-price" type="number" min="0" step="0.01" class="field w-full px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')submitEditItem()">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Tracking</label>
+                        <input id="ei-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Tracking"
+                               onkeydown="if(event.key==='Enter')submitEditItem()">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Tipo</label>
+                        <select id="ei-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
+                            <option value="comercial">🏢 Comercial</option>
+                            <option value="personal">👤 Personal</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="flex gap-3 justify-end mt-5">
@@ -1159,6 +1180,9 @@
         document.getElementById('ei-id').value = itemId;
         document.getElementById('ei-title').value = item.title || '';
         document.getElementById('ei-tracking').value = item.tracking || '';
+        document.getElementById('ei-qty').value = item.qty;
+        document.getElementById('ei-price').value = item.price;
+        document.getElementById('ei-type').value = item.item_type || 'comercial';
         const modal = document.getElementById('edit-item-modal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1175,14 +1199,19 @@
         const id = parseInt(document.getElementById('ei-id').value);
         const title = document.getElementById('ei-title').value.trim();
         const tracking = document.getElementById('ei-tracking').value.trim();
+        const qty = parseInt(document.getElementById('ei-qty').value);
+        const price = parseFloat(document.getElementById('ei-price').value);
+        const item_type = document.getElementById('ei-type').value;
         if (!title) { toast('El título no puede estar vacío', 'warning'); return; }
+        if (!qty || qty <= 0) { toast('Cantidad inválida', 'warning'); return; }
+        if (isNaN(price) || price < 0) { toast('Precio inválido', 'warning'); return; }
         const btn = document.getElementById('ei-submit');
         btn.disabled = true; btn.textContent = 'Guardando...';
         try {
             const res = await fetch(`/api/items/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, tracking })
+                body: JSON.stringify({ title, tracking, qty, price, item_type })
             });
             const data = await res.json();
             if (res.ok) {
@@ -1190,7 +1219,7 @@
                 closeEditItemModal();
                 // reflect in box if present
                 const boxEntry = boxItems.get(id);
-                if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; renderBox(); }
+                if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; boxEntry.item.price = price; boxEntry.item.item_type = item_type; boxEntry.qty = qty; boxEntry.item.qty = qty; renderBox(); }
                 loadItems();
             } else {
                 toast(data.error || 'Error al guardar', 'error');

@@ -1695,6 +1695,18 @@ def mark_sent(invoice_id):
     conn.close()
     return jsonify({'message': 'Invoice marked as sent'})
 
+def adjust_invoice_total(conn, invoice_id, amount_delta=0.0, count_delta=0):
+    """Adjust an invoice's total/items_count by a delta (keeps any discount intact)."""
+    if not invoice_id:
+        return
+    inv = conn.execute("SELECT total, items_count FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+    if not inv:
+        return
+    new_total = round(max(0.0, (inv['total'] or 0) + amount_delta), 2)
+    new_count = max(0, (inv['items_count'] or 0) + count_delta)
+    conn.execute("UPDATE invoices SET total = ?, items_count = ? WHERE id = ?",
+                 (new_total, new_count, invoice_id))
+
 @app.route('/api/items/<int:item_id>/status', methods=['PUT'])
 def update_item_status(item_id):
     """Change the status of an item (pending/invoiced/sent)."""
@@ -1703,9 +1715,13 @@ def update_item_status(item_id):
     if new_status not in ('pending', 'invoiced', 'sent'):
         return jsonify({'error': 'Invalid status'}), 400
     conn = get_db()
-    # If changing to pending, unlink from invoice
+    old = conn.execute("SELECT invoice_id, price, qty FROM items WHERE id = ?", (item_id,)).fetchone()
+    old_invoice_id = old['invoice_id'] if old else None
+    # If changing to pending, unlink from invoice and subtract the item from that invoice's total
     if new_status == 'pending':
         conn.execute("UPDATE items SET status = ?, invoice_id = NULL WHERE id = ?", (new_status, item_id))
+        if old_invoice_id:
+            adjust_invoice_total(conn, old_invoice_id, -(old['price'] * old['qty']), -1)
     else:
         conn.execute("UPDATE items SET status = ? WHERE id = ?", (new_status, item_id))
     conn.commit()
@@ -1714,13 +1730,15 @@ def update_item_status(item_id):
 
 @app.route('/api/items/<int:item_id>', methods=['PATCH'])
 def update_item_fields(item_id):
-    """Edit an item's title and/or tracking."""
+    """Edit an item's title, tracking, price, qty and/or type."""
     data = request.json or {}
     conn = get_db()
-    row = conn.execute("SELECT id, order_id FROM items WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute("SELECT id, invoice_id, price, qty FROM items WHERE id = ?", (item_id,)).fetchone()
     if row is None:
         conn.close()
         return jsonify({'error': 'Item no encontrado'}), 404
+    old_amount = (row['price'] or 0) * (row['qty'] or 0)
+    new_price, new_qty = row['price'], row['qty']
     sets, params = [], []
     if 'title' in data:
         title = str(data.get('title', '')).strip()
@@ -1729,13 +1747,36 @@ def update_item_fields(item_id):
             return jsonify({'error': 'El título no puede estar vacío'}), 400
         sets.append('title = ?'); params.append(title)
     if 'tracking' in data:
-        tracking = str(data.get('tracking', '')).strip()
-        sets.append('tracking = ?'); params.append(tracking)
+        sets.append('tracking = ?'); params.append(str(data.get('tracking', '')).strip())
+    if 'price' in data:
+        try:
+            price = round(float(data.get('price')), 2)
+        except (TypeError, ValueError):
+            conn.close(); return jsonify({'error': 'Precio inválido'}), 400
+        if price < 0:
+            conn.close(); return jsonify({'error': 'El precio no puede ser negativo'}), 400
+        sets.append('price = ?'); params.append(price); new_price = price
+    if 'qty' in data:
+        try:
+            qty = int(data.get('qty'))
+        except (TypeError, ValueError):
+            conn.close(); return jsonify({'error': 'Cantidad inválida'}), 400
+        if qty <= 0:
+            conn.close(); return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+        sets.append('qty = ?'); params.append(qty); new_qty = qty
+    if 'item_type' in data:
+        it = str(data.get('item_type', '')).strip().lower()
+        if it not in ('comercial', 'personal'):
+            conn.close(); return jsonify({'error': 'Tipo inválido'}), 400
+        sets.append('item_type = ?'); params.append(it)
     if not sets:
         conn.close()
         return jsonify({'error': 'Nada para actualizar'}), 400
     params.append(item_id)
     conn.execute(f"UPDATE items SET {', '.join(sets)} WHERE id = ?", params)
+    # If price/qty changed and the item belongs to an invoice, adjust that invoice's total by the delta
+    if ('price' in data or 'qty' in data) and row['invoice_id']:
+        adjust_invoice_total(conn, row['invoice_id'], (new_price * new_qty) - old_amount, 0)
     conn.commit()
     conn.close()
     return jsonify({'message': 'Ítem actualizado'})
