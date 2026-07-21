@@ -67,7 +67,7 @@ INVOICE_BRAND = {
         'sender': ['30 W. 26th Street', 'New York, NY 10010'],
         'customer': 'INMERSIA SRL',
         'cust_name': 'Name: INMERSIA SRL',
-        'cust_address': 'Pedro Lozano 4579',
+        'cust_address': 'Av Scalabrini Ortiz 85',
         'cust_city': 'City: CABA, Argentina',
         'cust_zip': 'ZIP: 1417',
         'cust_cuit': 'CUIT: 30-71798023-5',
