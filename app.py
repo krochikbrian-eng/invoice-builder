@@ -1864,7 +1864,7 @@ def update_item_fields(item_id):
         sets.append('qty = ?'); params.append(qty); new_qty = qty
     if 'item_type' in data:
         it = str(data.get('item_type', '')).strip().lower()
-        if it not in ('comercial', 'personal', 'revisar'):
+        if it not in ('comercial', 'personal', 'especial', 'revisar'):
             conn.close(); return jsonify({'error': 'Tipo inválido'}), 400
         sets.append('item_type = ?'); params.append(it)
     if not sets:
@@ -1884,7 +1884,7 @@ def update_item_type(item_id):
     """Change an item's type (comercial/personal)."""
     data = request.json or {}
     new_type = str(data.get('item_type', '')).strip().lower()
-    if new_type not in ('comercial', 'personal', 'revisar'):
+    if new_type not in ('comercial', 'personal', 'especial', 'revisar'):
         return jsonify({'error': 'Tipo inválido'}), 400
     conn = get_db()
     if conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
@@ -1933,7 +1933,7 @@ def add_manual_item():
         return jsonify({'error': 'El costo no puede ser negativo'}), 400
     company = get_company()
     item_type = str(data.get('item_type', 'comercial')).strip().lower()
-    if item_type not in ('comercial', 'personal', 'revisar'):
+    if item_type not in ('comercial', 'personal', 'especial', 'revisar'):
         item_type = 'comercial'
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
