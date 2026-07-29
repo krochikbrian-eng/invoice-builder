@@ -396,6 +396,12 @@ def init_db():
         conn.commit()
     except Exception:
         pass  # Column already exists
+    # Migration: add discount column to invoices (percentage applied at generation)
+    try:
+        conn.execute("ALTER TABLE invoices ADD COLUMN discount REAL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
@@ -1244,21 +1250,7 @@ def generate_invoice():
     invoice_date = date.today()
     total = sum(i['price'] * i['qty'] for i in items)
 
-    # Create invoice record
-    cursor = conn.execute(
-        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company) VALUES (?, ?, ?, ?, ?, ?)",
-        (invoice_number, invoice_date.isoformat(), total, len(items), 'invoice', company)
-    )
-    invoice_id = cursor.lastrowid
-
-    # Update items status
-    conn.execute(
-        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
-        [invoice_id] + item_ids
-    )
-    conn.commit()
-
-    # Generate files
+    # Generate files FIRST — if anything here fails, the items stay pending (no DB change yet)
     xlsx_buf = generate_xlsx(invoice_number, invoice_date, items, company)
     pdf_buf = generate_pdf(invoice_number, invoice_date, items, company)
     remito_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, items)
@@ -1288,6 +1280,18 @@ def generate_invoice():
 
     zip_buf.seek(0)
     zip_data = zip_buf.read()
+
+    # Files built OK — now persist: create the invoice record and mark items as invoiced
+    cursor = conn.execute(
+        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company, discount) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (invoice_number, invoice_date.isoformat(), total, len(items), 'invoice', company, discount)
+    )
+    invoice_id = cursor.lastrowid
+    conn.execute(
+        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
+        [invoice_id] + item_ids
+    )
+    conn.commit()
     conn.close()
 
     # Try to send email if configured — individual files, no ZIP
@@ -1386,21 +1390,7 @@ def generate_remito():
     invoice_date = date.today()
     total = sum(i['price'] * i['qty'] for i in items)
 
-    # Create invoice record (same table)
-    cursor = conn.execute(
-        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company) VALUES (?, ?, ?, ?, ?, ?)",
-        (invoice_number, invoice_date.isoformat(), total, len(items), 'remito', company)
-    )
-    invoice_id = cursor.lastrowid
-
-    # Update items status
-    conn.execute(
-        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
-        [invoice_id] + item_ids
-    )
-    conn.commit()
-
-    # Generate remito PDFs
+    # Generate remito PDFs FIRST — if anything fails, items stay pending (no DB change yet)
     pdf_buf = generate_remito_pdf(invoice_number, invoice_date, items)
     pdf_no_prices_buf = generate_remito_pdf_no_prices(invoice_number, invoice_date, items)
 
@@ -1428,6 +1418,18 @@ def generate_remito():
 
     zip_buf.seek(0)
     zip_data = zip_buf.read()
+
+    # Files built OK — now persist: create the record and mark items as invoiced
+    cursor = conn.execute(
+        "INSERT INTO invoices (invoice_number, date, total, items_count, type, company, discount) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (invoice_number, invoice_date.isoformat(), total, len(items), 'remito', company, discount)
+    )
+    invoice_id = cursor.lastrowid
+    conn.execute(
+        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
+        [invoice_id] + item_ids
+    )
+    conn.commit()
     conn.close()
 
     # Try to send email if configured — individual files, no ZIP
@@ -1491,6 +1493,7 @@ def download_remito(invoice_id):
     conn.close()
 
     items = [{'title': r['title'], 'price': r['price'], 'qty': r['qty'], 'order_id': r['order_id'], 'tracking': r['tracking'] if 'tracking' in r.keys() else ''} for r in rows]
+    _apply_invoice_discount(inv, items)
     invoice_date = datetime.strptime(inv['date'], '%Y-%m-%d').date()
 
     pdf_buf = generate_remito_pdf(inv['invoice_number'], invoice_date, items)
@@ -1575,6 +1578,7 @@ def download_invoice(invoice_id):
     conn.close()
 
     items = [{'title': r['title'], 'price': r['price'], 'qty': r['qty'], 'order_id': r['order_id'], 'tracking': r['tracking'] if 'tracking' in r.keys() else ''} for r in rows]
+    _apply_invoice_discount(inv, items)
 
     invoice_date = datetime.strptime(inv['date'], '%Y-%m-%d').date()
     try:
@@ -1792,6 +1796,17 @@ def mark_sent(invoice_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Invoice marked as sent'})
+
+def _apply_invoice_discount(inv, items):
+    """Apply the invoice's stored discount % to item prices (for re-downloads)."""
+    try:
+        d = float(inv['discount'] or 0)
+    except (IndexError, KeyError, TypeError, ValueError):
+        d = 0.0
+    if d > 0:
+        for it in items:
+            it['price'] = round(it['price'] * (1 - d / 100), 1)
+    return items
 
 def adjust_invoice_total(conn, invoice_id, amount_delta=0.0, count_delta=0):
     """Adjust an invoice's total/items_count by a delta (keeps any discount intact)."""
