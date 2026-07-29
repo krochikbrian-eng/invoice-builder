@@ -979,9 +979,9 @@
                      data-id="${item.id}" ${!isUsed && !inBox ? 'draggable="true"' : ''} onclick="toggleSelect(${item.id})">
                     <!-- Row 1: Title + Price -->
                     <div class="flex justify-between items-start gap-3">
-                        <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title copyable"
-                           title="Click para copiar el título completo"
-                           onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}</p>
+                        <p class="text-sm font-semibold flex-1 min-w-0 leading-snug item-title">
+                           <span class="copyable" title="Click para copiar el título completo"
+                                 onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)">${escHtml(item.title.substring(0, 90))}${item.title.length > 90 ? '...' : ''}</span></p>
                         <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">${fmtMoney(total)}</span>
                     </div>
                     <!-- Row 2: Metadata grid -->
