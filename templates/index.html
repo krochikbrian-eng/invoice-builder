@@ -381,6 +381,7 @@
                         <h2 class="text-xl font-semibold">📦 Ítems Disponibles <span id="pending-count" class="text-blue-300"></span></h2>
                         <div class="flex items-center gap-3">
                             <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-md text-xs font-medium shrink-0">➕ Ítem manual</button>
+                            <button onclick="toggleSelectAllFiltered()" id="select-all-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Selecciona todos los ítems que se ven con los filtros actuales">☑️ Seleccionar todo</button>
                             <span class="text-xs text-gray-500 hidden md:inline">Tip: <kbd>/</kbd> para buscar · click en título/tracking/ASIN copia</span>
                         </div>
                     </div>
@@ -630,6 +631,7 @@
     let boxSortable = null;
     let allInvoices = [];
     let selectedItems = new Set(); // ids for bulk status change
+    let filteredItems = [];        // ítems actualmente visibles (según filtros/búsqueda)
 
     // ─── PO Config ──────────────────────────────────────────────────────
     const DEFAULT_POS = ['9999', '99999'];
@@ -929,7 +931,6 @@
         const list = document.getElementById('items-list');
 
         renderStats();
-        renderBulkBar();
 
         let filtered = allItems.filter(item => {
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
@@ -949,6 +950,8 @@
             title_asc:  (a, b) => a.title.localeCompare(b.title),
         };
         if (sorters[sortBy]) filtered = [...filtered].sort(sorters[sortBy]);
+        filteredItems = filtered; // lo que se ve ahora (para "Seleccionar todo")
+        renderBulkBar();          // depende de filteredItems, por eso va después
 
         const countEl = document.getElementById('filtered-count');
         if (countEl) {
@@ -1065,7 +1068,29 @@
         renderItems();
     }
 
+    // Selecciona (o deselecciona) todos los ítems visibles según los filtros actuales
+    function toggleSelectAllFiltered() {
+        const ids = filteredItems.map(i => i.id);
+        if (ids.length === 0) return;
+        const allSelected = ids.every(id => selectedItems.has(id));
+        if (allSelected) {
+            ids.forEach(id => selectedItems.delete(id));
+        } else {
+            ids.forEach(id => selectedItems.add(id));
+        }
+        renderItems();
+    }
+
     function renderBulkBar() {
+        // Botón "Seleccionar todo" / "Deseleccionar todo" según el estado de lo filtrado
+        const saBtn = document.getElementById('select-all-btn');
+        if (saBtn) {
+            const ids = filteredItems.map(i => i.id);
+            const allSel = ids.length > 0 && ids.every(id => selectedItems.has(id));
+            saBtn.textContent = allSel ? '☐ Deseleccionar todo' : `☑️ Seleccionar todo${ids.length ? ' (' + ids.length + ')' : ''}`;
+            saBtn.disabled = ids.length === 0;
+            saBtn.classList.toggle('opacity-50', ids.length === 0);
+        }
         const bar = document.getElementById('bulk-bar');
         if (!bar) return;
         const count = selectedItems.size;
