@@ -1798,11 +1798,26 @@ def mark_sent(invoice_id):
     return jsonify({'message': 'Invoice marked as sent'})
 
 def _apply_invoice_discount(inv, items):
-    """Apply the invoice's stored discount % to item prices (for re-downloads)."""
+    """Apply the invoice's discount % to item prices (for re-downloads).
+
+    Uses the stored `discount` column. For invoices created before that column
+    existed, the discount is inferred from the stored total vs. the raw sum.
+    """
     try:
         d = float(inv['discount'] or 0)
     except (IndexError, KeyError, TypeError, ValueError):
         d = 0.0
+    if d <= 0:
+        # Legacy invoices: infer the discount from the saved total
+        try:
+            stored_total = float(inv['total'] or 0)
+        except (IndexError, KeyError, TypeError, ValueError):
+            stored_total = 0.0
+        raw_total = sum((it['price'] or 0) * (it['qty'] or 0) for it in items)
+        if raw_total > 0 and 0 < stored_total < raw_total - 0.01:
+            inferred = (1 - stored_total / raw_total) * 100
+            if 0.5 <= inferred <= 95:  # sane range; ignore rounding noise
+                d = round(inferred, 2)
     if d > 0:
         for it in items:
             it['price'] = round(it['price'] * (1 - d / 100), 1)
