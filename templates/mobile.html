@@ -241,7 +241,7 @@
 </div>
 
 <!-- Generic confirmation modal -->
-<div id="confirm-modal" class="modal-overlay" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
+<div id="confirm-modal" class="modal-overlay" style="z-index:70;" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
     <div class="card p-5 w-full max-w-sm">
         <h3 id="confirm-modal-title" class="font-bold text-base mb-2">¿Confirmar?</h3>
         <p id="confirm-modal-text" class="text-sm text-gray-400 mb-5" style="white-space:pre-line;"></p>

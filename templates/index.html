@@ -181,7 +181,7 @@
     </div>
 
     <!-- Generic confirmation modal -->
-    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
+    <div id="confirm-modal" class="fixed inset-0 hidden items-center justify-center modal-backdrop" style="z-index:70;" onclick="if(event.target===this)document.getElementById('confirm-modal')._cancel?.()">
         <div class="card p-6 max-w-md mx-auto anim-in">
             <h3 id="confirm-modal-title" class="text-lg font-semibold mb-2">¿Confirmar?</h3>
             <p id="confirm-modal-text" class="text-sm text-gray-400 mb-4" style="white-space:pre-line;"></p>
@@ -1878,7 +1878,8 @@
                     <div class="flex-1 min-w-0">
                         <p class="text-xs font-semibold leading-snug">${escHtml(item.title.substring(0, 80))}${item.title.length > 80 ? '...' : ''}</p>
                         <p class="text-xs text-gray-400 mt-0.5">$${item.price.toFixed(2)} × ${item.qty} = <span class="text-green-400 font-semibold">$${total}</span>
-                            <span class="ml-2 text-gray-500 font-mono">${escHtml(item.tracking || item.order_id || '')}</span>
+                            <span class="ml-2 text-gray-500 font-mono copyable" title="Click para copiar el tracking"
+                                  onclick="event.stopPropagation(); copyItemField(${item.id}, 'tracking', this)">${escHtml(item.tracking || item.order_id || '')}</span>
                         </p>
                     </div>
                     ${isChecked ? `

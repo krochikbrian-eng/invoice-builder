@@ -34,6 +34,25 @@ from openpyxl.drawing.image import Image as XLImage
 import json as _json
 
 app = Flask(__name__)
+
+@app.errorhandler(Exception)
+def _api_json_errors(e):
+    """Return JSON (not an HTML page) when an /api/ call fails, and log the traceback.
+
+    Without this the frontend receives '<!doctype ...' and shows
+    'Unexpected token <' instead of the real error message.
+    """
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': e.description}), e.code
+        return e
+    import traceback as _tb
+    app.logger.error("Unhandled error on %s:\n%s", request.path, _tb.format_exc())
+    if request.path.startswith('/api/'):
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+    raise e
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1658,16 +1677,27 @@ def add_items_to_invoice(invoice_id):
     # Apply discount only to new items
     discount = float(data.get('discount', 0) or 0)
 
+    def _safe_qty(raw, fallback):
+        """Parse a quantity defensively — never blow up on '', None or junk."""
+        for candidate in (raw, fallback):
+            try:
+                q = int(float(str(candidate).strip()))
+                if q > 0:
+                    return q
+            except (TypeError, ValueError, AttributeError):
+                continue
+        return 1
+
     def row_to_item(row, apply_discount=False):
-        price = row['price']
+        price = row['price'] or 0
         if apply_discount and discount > 0:
             price = round(price * (1 - discount / 100), 1)
         return {
-            'title': row['title'],
+            'title': row['title'] or '',
             'price': price,
-            'qty': int(data.get('quantities', {}).get(str(row['id']), row['qty'])),
-            'order_id': row['order_id'],
-            'tracking': row['tracking'] if 'tracking' in row.keys() else '',
+            'qty': _safe_qty(data.get('quantities', {}).get(str(row['id'])), row['qty']),
+            'order_id': row['order_id'] or '',
+            'tracking': (row['tracking'] if 'tracking' in row.keys() else '') or '',
         }
 
     all_items = [row_to_item(r, apply_discount=False) for r in existing_rows] + \
