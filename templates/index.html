@@ -1639,15 +1639,19 @@
                         <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
                         <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
                         ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
+                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#f38ba8;color:#1e1e2e;" title="Cancela el envío y devuelve todos los ítems a Pendiente">🧩 Desarmar</button>
                     </div>
                 </div>
                 <details class="mt-3">
                     <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems (${inv.items_count})</summary>
                     <div class="mt-2 space-y-1">
                         ${inv.items.map(i => `
-                            <div class="text-xs text-gray-400 flex justify-between gap-2">
+                            <div class="text-xs text-gray-400 flex justify-between items-center gap-2">
                                 <span class="truncate max-w-sm copyable" title="Click para copiar" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>
-                                <span class="shrink-0 tabular-nums">${i.qty} × $${i.price.toFixed(2)}</span>
+                                <span class="flex items-center gap-2 shrink-0">
+                                    <span class="tabular-nums">${i.qty} × $${i.price.toFixed(2)}</span>
+                                    <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
+                                </span>
                             </div>
                         `).join('')}
                     </div>
@@ -1682,6 +1686,62 @@
             loadItems();
         } catch (err) {
             toast('Error al marcar como enviado', 'error');
+        }
+    }
+
+    // Desarma el envío: borra el documento y devuelve TODOS sus ítems a Pendiente
+    async function unmakeInvoice(id, number, type) {
+        const label = type === 'remito' ? 'Especial' : 'Invoice';
+        const confirmed = await confirmDialog({
+            title: `Desarmar ${label} #${number}`,
+            message: `¿Desarmar el ${label} #${number}?\n\nSe cancela el envío y todos sus ítems vuelven a Pendiente para que puedas rearmarlo.`,
+            confirmText: '🧩 Desarmar',
+            confirmClass: 'btn-danger',
+            icon: '🧩'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                toast(`${label} #${number} desarmado — los ítems volvieron a Pendiente`, 'success');
+                loadHistory();
+                loadItems();
+                updateNextInvoice();
+            } else {
+                toast(data.error || 'Error al desarmar', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        }
+    }
+
+    // Saca un ítem puntual del envío y lo devuelve a Pendiente (resta del total)
+    async function removeItemFromInvoice(itemId, title) {
+        const confirmed = await confirmDialog({
+            title: 'Sacar ítem del envío',
+            message: `¿Sacar "${title}" del envío?\n\nVuelve a Pendiente y se resta del total del documento.`,
+            confirmText: '✕ Sacar',
+            confirmClass: 'btn-danger',
+            icon: '📤'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'pending' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                toast('Ítem devuelto a Pendiente', 'success');
+                loadHistory();
+                loadItems();
+            } else {
+                toast(data.error || 'Error al sacar el ítem', 'error');
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
         }
     }
 
