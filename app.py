@@ -1327,7 +1327,9 @@ def generate_invoice():
     email_address = ''
     email_error = ''
     to_email = company_cfg(company).get('email')
-    if to_email:
+    if to_email and not email_enabled(company):
+        email_status = 'disabled'
+    elif to_email:
         email_address = to_email
         try:
             subject = f"Invoice {invoice_number} — {COMPANY_NAMES[company]}"
@@ -1471,7 +1473,9 @@ def generate_remito():
     email_address = ''
     email_error = ''
     to_email = company_cfg(company).get('email')
-    if to_email:
+    if to_email and not email_enabled(company):
+        email_status = 'disabled'
+    elif to_email:
         email_address = to_email
         try:
             subject = f"Invoice {invoice_number} — {COMPANY_NAMES[company]}"
@@ -1782,7 +1786,9 @@ def add_items_to_invoice(invoice_id):
     email_address = ''
     email_error = ''
     to_email = company_cfg(company).get('email')
-    if to_email:
+    if to_email and not email_enabled(company):
+        email_status = 'disabled'
+    elif to_email:
         email_address = to_email
         try:
             subject = f"{'Remito' if inv_type == 'remito' else 'Invoice'} {invoice_number} (actualizado) — {COMPANY_NAMES[company]}"
@@ -1841,6 +1847,10 @@ def mark_sent(invoice_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Invoice marked as sent'})
+
+def email_enabled(company=None):
+    """Whether automatic email sending is turned on for this company."""
+    return bool(company_cfg(company).get('email_enabled', False))
 
 def _hdr(value, limit=300):
     """Sanitize a value so it can travel safely in an HTTP header.
@@ -2093,19 +2103,24 @@ def set_po_config():
 
 @app.route('/api/config/email', methods=['GET'])
 def get_email_config():
-    return jsonify({'email': company_cfg(get_company()).get('email', None)})
+    cc = company_cfg(get_company())
+    return jsonify({'email': cc.get('email', None), 'enabled': bool(cc.get('email_enabled', False))})
 
 @app.route('/api/config/email', methods=['PUT'])
 def set_email_config():
-    data = request.get_json()
-    email = data.get('email', None)
-    if email is not None and email != '' and '@' not in str(email):
-        return jsonify({'error': 'Email inválido'}), 400
+    data = request.get_json() or {}
     company = get_company()
     full = load_config()
-    full['companies'][company]['email'] = email if email else None
+    if 'email' in data:
+        email = data.get('email', None)
+        if email is not None and email != '' and '@' not in str(email):
+            return jsonify({'error': 'Email inválido'}), 400
+        full['companies'][company]['email'] = email if email else None
+    if 'enabled' in data:
+        full['companies'][company]['email_enabled'] = bool(data.get('enabled'))
     save_config(full)
-    return jsonify({'email': full['companies'][company]['email']})
+    cc = full['companies'][company]
+    return jsonify({'email': cc.get('email'), 'enabled': bool(cc.get('email_enabled', False))})
 
 @app.route('/api/config/smtp', methods=['GET'])
 def get_smtp_config():

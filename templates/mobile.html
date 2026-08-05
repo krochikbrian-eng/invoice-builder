@@ -445,8 +445,11 @@
 
             <!-- Email de envío -->
             <div class="card section-card">
-                <div class="section-title">📧 Email de envío</div>
-                <div class="section-desc">Los invoices/especiales generados se enviarán automáticamente a este email.</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <div class="section-title" style="margin:0;">📧 Email de envío</div>
+                    <button id="email-toggle-btn" onclick="toggleEmailEnabled()" style="border:none;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">—</button>
+                </div>
+                <div class="section-desc">Los invoices/especiales generados se enviarán automáticamente a este email (si el envío está encendido).</div>
                 <div style="display:flex;gap:8px;align-items:center;width:100%;">
                     <input type="email" id="email-config" placeholder="usuario@ejemplo.com" onkeydown="if(event.key==='Enter')saveEmailConfig()" style="flex:1;min-width:0;font-size:14px;padding:10px 12px;border-radius:10px;border:1px solid #45475a;background:#313244;color:#cdd6f4;">
                     <button onclick="saveEmailConfig()" style="background:#89b4fa;color:#1e1e2e;border:none;padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">Guardar</button>
@@ -754,7 +757,39 @@ async function loadEmailConfig() {
             input.value = '';
             status.textContent = 'No configurado — no se enviarán emails.';
         }
+        emailEnabled = !!data.enabled;
+        renderEmailToggle();
     } catch(e) {}
+}
+
+// ─── Encendido/apagado del envío de emails ─────────────────────────────────
+let emailEnabled = false;
+
+function renderEmailToggle() {
+    const btn = document.getElementById('email-toggle-btn');
+    if (!btn) return;
+    btn.textContent = emailEnabled ? '🟢 ACTIVADO' : '⚪ APAGADO';
+    btn.style.background = emailEnabled ? '#a6e3a1' : '#45475a';
+    btn.style.color = emailEnabled ? '#1e1e2e' : '#cdd6f4';
+}
+
+async function toggleEmailEnabled() {
+    const next = !emailEnabled;
+    try {
+        const res = await fetch('/api/config/email', {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ enabled: next })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            emailEnabled = !!data.enabled;
+            renderEmailToggle();
+            toast(emailEnabled ? 'Envío de emails ACTIVADO' : 'Envío de emails APAGADO', 'success');
+        } else {
+            toast(data.error || 'Error al cambiar el estado', 'error');
+        }
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
 async function saveEmailConfig() {

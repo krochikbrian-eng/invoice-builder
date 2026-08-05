@@ -536,8 +536,11 @@
 
                 <!-- Email de envío -->
                 <div class="card p-5">
-                    <h3 class="text-sm font-semibold text-gray-300 mb-1">📧 Email de envío</h3>
-                    <p class="text-xs text-gray-500 mb-3">Los invoices/especiales generados se enviarán automáticamente a este email.</p>
+                    <div class="flex items-center justify-between gap-3 mb-1">
+                        <h3 class="text-sm font-semibold text-gray-300">📧 Email de envío</h3>
+                        <button id="email-toggle-btn" onclick="toggleEmailEnabled()" class="px-3 py-1.5 rounded-md text-xs font-semibold shrink-0">—</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-3">Los invoices/especiales generados se enviarán automáticamente a este email (si el envío está encendido).</p>
                     <div class="flex gap-2 items-center">
                         <input type="email" id="email-config" placeholder="usuario@ejemplo.com"
                                class="field flex-1 px-3 py-2 text-sm"
@@ -713,7 +716,42 @@
                 input.value = '';
                 status.textContent = 'No configurado — no se enviarán emails automáticamente.';
             }
+            emailEnabled = !!data.enabled;
+            renderEmailToggle();
         } catch(e) {}
+    }
+
+    // ─── Encendido/apagado del envío de emails ──────────────────────────
+    let emailEnabled = false;
+
+    function renderEmailToggle() {
+        const btn = document.getElementById('email-toggle-btn');
+        if (!btn) return;
+        btn.textContent = emailEnabled ? '🟢 Envío ACTIVADO' : '⚪ Envío APAGADO';
+        btn.style.background = emailEnabled ? '#a6e3a1' : '#45475a';
+        btn.style.color = emailEnabled ? '#1e1e2e' : '#cdd6f4';
+        btn.title = emailEnabled
+            ? 'Los invoices se envían por email automáticamente. Click para apagar.'
+            : 'No se envía ningún email al generar. Click para encender.';
+    }
+
+    async function toggleEmailEnabled() {
+        const next = !emailEnabled;
+        try {
+            const res = await fetch('/api/config/email', {
+                method: 'PUT',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ enabled: next })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                emailEnabled = !!data.enabled;
+                renderEmailToggle();
+                toast(emailEnabled ? 'Envío de emails ACTIVADO' : 'Envío de emails APAGADO', 'success');
+            } else {
+                toast(data.error || 'Error al cambiar el estado', 'error');
+            }
+        } catch(e) { toast('Error: ' + e.message, 'error'); }
     }
 
     async function saveEmailConfig() {
