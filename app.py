@@ -1366,9 +1366,9 @@ def generate_invoice():
         as_attachment=True,
         download_name=f'Invoice_{invoice_number}.zip'
     ))
-    response.headers['X-Email-Status'] = email_status
-    response.headers['X-Email-Address'] = email_address
-    response.headers['X-Email-Error'] = email_error
+    response.headers['X-Email-Status'] = _hdr(email_status)
+    response.headers['X-Email-Address'] = _hdr(email_address)
+    response.headers['X-Email-Error'] = _hdr(email_error)
     response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
     return response
 
@@ -1508,9 +1508,9 @@ def generate_remito():
         as_attachment=True,
         download_name=f'Remito_{invoice_number}.zip'
     ))
-    response.headers['X-Email-Status'] = email_status
-    response.headers['X-Email-Address'] = email_address
-    response.headers['X-Email-Error'] = email_error
+    response.headers['X-Email-Status'] = _hdr(email_status)
+    response.headers['X-Email-Address'] = _hdr(email_address)
+    response.headers['X-Email-Error'] = _hdr(email_error)
     response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
     return response
 
@@ -1826,9 +1826,9 @@ def add_items_to_invoice(invoice_id):
         as_attachment=True,
         download_name=download_name
     ))
-    response.headers['X-Email-Status'] = email_status
-    response.headers['X-Email-Address'] = email_address
-    response.headers['X-Email-Error'] = email_error
+    response.headers['X-Email-Status'] = _hdr(email_status)
+    response.headers['X-Email-Address'] = _hdr(email_address)
+    response.headers['X-Email-Error'] = _hdr(email_error)
     response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
     return response
 
@@ -1841,6 +1841,18 @@ def mark_sent(invoice_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Invoice marked as sent'})
+
+def _hdr(value, limit=300):
+    """Sanitize a value so it can travel safely in an HTTP header.
+
+    Provider errors (Resend/Mailgun/SendGrid) come back as multi-line JSON and
+    would raise 'Header values must not contain newline characters'.
+    """
+    s = '' if value is None else str(value)
+    s = s.replace('\r', ' ').replace('\n', ' ')
+    s = ''.join(ch if 32 <= ord(ch) < 127 or ord(ch) > 159 else ' ' for ch in s)
+    s = ' '.join(s.split())
+    return s[:limit]
 
 def _apply_invoice_discount(inv, items):
     """Apply the invoice's discount % to item prices (for re-downloads).
