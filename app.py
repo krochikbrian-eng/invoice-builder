@@ -1241,8 +1241,17 @@ def generate_invoice():
         item_ids
     ).fetchall()
 
-    if not rows:
-        return jsonify({'error': 'No pending items found with given IDs'}), 400
+    # Detect items that are no longer pending (already invoiced elsewhere / deleted).
+    # Never generate silently with fewer items than the user selected.
+    found_ids = {r['id'] for r in rows}
+    stale_ids = [i for i in item_ids if i not in found_ids]
+    if stale_ids:
+        conn.close()
+        return jsonify({
+            'error': f'{len(stale_ids)} ítem(s) de la caja ya no están pendientes '
+                     f'(fueron facturados o eliminados). Se quitaron de la caja: revisá y volvé a generar.',
+            'stale_ids': stale_ids,
+        }), 409
 
     items = []
     order_ids = set()
@@ -1381,9 +1390,15 @@ def generate_remito():
         item_ids
     ).fetchall()
 
-    if not rows:
+    found_ids = {r['id'] for r in rows}
+    stale_ids = [i for i in item_ids if i not in found_ids]
+    if stale_ids:
         conn.close()
-        return jsonify({'error': 'No pending items found with given IDs'}), 400
+        return jsonify({
+            'error': f'{len(stale_ids)} ítem(s) de la caja ya no están pendientes '
+                     f'(fueron facturados o eliminados). Se quitaron de la caja: revisá y volvé a generar.',
+            'stale_ids': stale_ids,
+        }), 409
 
     items = []
     order_ids = set()

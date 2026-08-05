@@ -886,11 +886,26 @@
             const res = await fetch('/api/items');
             allItems = await res.json();
             selectedItems = new Set([...selectedItems].filter(id => allItems.some(i => i.id === id)));
+            pruneBox();   // saca de la caja lo que ya no está pendiente
             renderItems();
             updateNextInvoice();
         } catch (err) {
             toast('Error al cargar ítems', 'error');
         }
+    }
+
+    // Quita de la caja los ítems que ya no existen o dejaron de estar pendientes
+    function pruneBox(extraIds = []) {
+        const stale = [];
+        for (const id of [...boxItems.keys()]) {
+            const it = allItems.find(i => i.id === id);
+            if (!it || it.status !== 'pending' || extraIds.includes(id)) {
+                boxItems.delete(id);
+                stale.push(id);
+            }
+        }
+        if (stale.length) renderBox();
+        return stale.length;
     }
 
     function filterItems() {
@@ -1473,6 +1488,12 @@
                 updateNextInvoice();
             } else {
                 const data = await res.json();
+                if (res.status === 409 && Array.isArray(data.stale_ids)) {
+                    // Ítems que ya no están pendientes: los saco de la caja y refresco
+                    (data.stale_ids || []).forEach(id => boxItems.delete(id));
+                    renderBox();
+                    await loadItems();
+                }
                 toast(data.error || 'Error al generar', 'error');
             }
         } catch (err) {
@@ -1540,6 +1561,11 @@
                 updateNextInvoice();
             } else {
                 const data = await res.json();
+                if (res.status === 409 && Array.isArray(data.stale_ids)) {
+                    (data.stale_ids || []).forEach(id => boxItems.delete(id));
+                    renderBox();
+                    await loadItems();
+                }
                 toast(data.error || 'Error al generar especial', 'error');
             }
         } catch (err) {
