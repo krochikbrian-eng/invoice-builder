@@ -622,6 +622,7 @@
             const res = await fetch('/api/config/po');
             const data = await res.json();
             if (data.pos) localStorage.setItem('acceptedPOs', JSON.stringify(data.pos));
+            if (data.types) localStorage.setItem('poTypes', JSON.stringify(data.types));
         } catch (e) {}
         // Reload the data of the currently visible tab
         showTab(localStorage.getItem('lastTab') || 'items');
@@ -644,18 +645,42 @@
     }
     function saveAcceptedPOs(pos) {
         localStorage.setItem('acceptedPOs', JSON.stringify(pos));
-        fetch('/api/config/po', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({pos}) });
+        const types = getPOTypes();
+        fetch('/api/config/po', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({pos, types}) });
     }
     function renderPOs() {
         const list = document.getElementById('po-list');
         if (!list) return;
         const pos = getAcceptedPOs();
-        list.innerHTML = pos.map(po => `
-            <span class="inline-flex items-center gap-1.5 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full px-3 py-1 text-sm font-mono">
-                ${po}
-                <button onclick="removePO('${po}')" class="text-blue-400/60 hover:text-red-400 transition-colors ml-0.5">&times;</button>
-            </span>
-        `).join('');
+        const types = getPOTypes();
+        list.innerHTML = pos.map(po => {
+            const t = types[po] || 'comercial';
+            return `
+            <span class="inline-flex items-center gap-2 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full pl-3 pr-2 py-1 text-sm font-mono">
+                ${escHtml(po)}
+                <select onchange="setPOType('${escAttr(po)}', this.value)" title="Tipo que se asigna a los ítems importados con este PO"
+                        class="field text-xs px-1.5 py-0.5 cursor-pointer" style="font-family:inherit;">
+                    <option value="comercial" ${t==='comercial'?'selected':''}>🏢 Comercial</option>
+                    <option value="personal" ${t==='personal'?'selected':''}>👤 Personal</option>
+                    <option value="especial" ${t==='especial'?'selected':''}>⭐ Especial</option>
+                    <option value="revisar" ${t==='revisar'?'selected':''}>🔎 Revisar</option>
+                </select>
+                <button onclick="removePO('${escAttr(po)}')" class="text-blue-400/60 hover:text-red-400 transition-colors">&times;</button>
+            </span>`;
+        }).join('');
+    }
+
+    function getPOTypes() {
+        try { return JSON.parse(localStorage.getItem('poTypes') || '{}'); } catch (e) { return {}; }
+    }
+
+    function setPOType(po, type) {
+        const types = getPOTypes();
+        types[po] = type;
+        localStorage.setItem('poTypes', JSON.stringify(types));
+        saveAcceptedPOs(getAcceptedPOs());
+        const labels = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', revisar:'🔎 Revisar'};
+        toast(`PO ${po} → ${labels[type] || type}`, 'success');
     }
     function addPO() {
         const input = document.getElementById('new-po');
@@ -2132,6 +2157,7 @@
             const res = await fetch('/api/config/po');
             const data = await res.json();
             if (data.pos) localStorage.setItem('acceptedPOs', JSON.stringify(data.pos));
+            if (data.types) localStorage.setItem('poTypes', JSON.stringify(data.types));
         } catch(e) {}
         const lastTab = localStorage.getItem('lastTab') || 'items';
         showTab(lastTab);

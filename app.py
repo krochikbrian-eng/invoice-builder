@@ -157,6 +157,21 @@ def company_cfg(company=None):
 def get_accepted_pos(company=None):
     return company_cfg(company).get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
 
+def get_po_types(company=None):
+    """Mapping PO -> item type (comercial/personal/especial/revisar) for CSV imports."""
+    raw = company_cfg(company).get('po_types', {}) or {}
+    out = {}
+    for po, t in raw.items():
+        t = str(t).strip().lower()
+        if t in ('comercial', 'personal', 'especial', 'revisar'):
+            out[str(po).strip()] = t
+    return out
+
+def type_for_po(po, company=None, _cache=None):
+    """Item type that corresponds to a PO number (defaults to 'comercial')."""
+    mapping = _cache if _cache is not None else get_po_types(company)
+    return mapping.get(str(po).strip(), 'comercial')
+
 def _get_sendgrid_key(company=None):
     return (company_cfg(company).get('sendgrid_api_key', '') or os.environ.get('SENDGRID_API_KEY', ''))
 
@@ -1148,6 +1163,7 @@ def upload_csv():
         return jsonify({'error': 'No items found with "Estado de entrega" = Entregado'}), 400
 
     # Save to DB, skip duplicates
+    po_type_map = get_po_types(company)   # PO -> tipo (comercial/personal/especial/revisar)
     conn = get_db()
     saved = 0
     skipped = 0
@@ -1162,11 +1178,12 @@ def upload_csv():
             continue
 
         conn.execute("""
-            INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+            INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company, item_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
         """, (item['order_id'], item['asin'], item['title'], item['price'],
               item['qty'], item['po'], item['order_date'], item['order_status'],
-              item['total_neto'], item['tracking'], company))
+              item['total_neto'], item['tracking'], company,
+              type_for_po(item['po'], _cache=po_type_map)))
         saved += 1
 
     conn.commit()
@@ -2060,7 +2077,8 @@ def delete_item(item_id):
 
 @app.route('/api/config/po', methods=['GET'])
 def get_po_config():
-    return jsonify({'pos': get_accepted_pos(get_company())})
+    company = get_company()
+    return jsonify({'pos': get_accepted_pos(company), 'types': get_po_types(company)})
 
 @app.route('/api/config/invoice-counter', methods=['GET'])
 def get_invoice_counter():
@@ -2098,8 +2116,17 @@ def set_po_config():
     company = get_company()
     full = load_config()
     full['companies'][company]['accepted_pos'] = pos
+    # PO -> tipo de ítem para las importaciones por CSV
+    if 'types' in data and isinstance(data['types'], dict):
+        types = {}
+        for po, t in data['types'].items():
+            po = str(po).strip()
+            t = str(t).strip().lower()
+            if po in pos and t in ('comercial', 'personal', 'especial', 'revisar'):
+                types[po] = t
+        full['companies'][company]['po_types'] = types
     save_config(full)
-    return jsonify({'pos': pos})
+    return jsonify({'pos': pos, 'types': get_po_types(company)})
 
 @app.route('/api/config/email', methods=['GET'])
 def get_email_config():
