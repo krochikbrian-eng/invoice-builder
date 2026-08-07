@@ -96,6 +96,25 @@
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
 
+        /* Botones de acción sobrios (historial): fondo translúcido + borde del color */
+        .btn-act {
+            display: inline-flex; align-items: center; gap: .4rem;
+            padding: .4rem .75rem; border-radius: .5rem;
+            font-size: .8125rem; font-weight: 500; letter-spacing: .01em;
+            border: 1px solid transparent; background: transparent;
+            transition: background .15s ease, border-color .15s ease, color .15s ease;
+            cursor: pointer; white-space: nowrap;
+        }
+        .btn-act:active { transform: scale(.985); }
+        .btn-act-blue   { color: #9db9e8; border-color: rgba(137,180,250,.28); background: rgba(137,180,250,.08); }
+        .btn-act-blue:hover   { background: rgba(137,180,250,.16); border-color: rgba(137,180,250,.45); color: #b8cdf2; }
+        .btn-act-green  { color: #9ccfa6; border-color: rgba(166,227,161,.26); background: rgba(166,227,161,.07); }
+        .btn-act-green:hover  { background: rgba(166,227,161,.14); border-color: rgba(166,227,161,.42); color: #b6e0bd; }
+        .btn-act-muted  { color: #a6adc8; border-color: rgba(166,173,200,.24); background: rgba(166,173,200,.06); }
+        .btn-act-muted:hover  { background: rgba(166,173,200,.13); border-color: rgba(166,173,200,.38); color: #c5cbdd; }
+        .btn-act-red    { color: #d99;    border-color: rgba(243,139,168,.24); background: rgba(243,139,168,.06); }
+        .btn-act-red:hover    { background: rgba(243,139,168,.14); border-color: rgba(243,139,168,.4);  color: #eaa7b6; }
+
         input, select { color-scheme: dark; }
         .field {
             background: var(--surface-2); border: 1px solid var(--border); border-radius: 0.5rem;
@@ -1699,10 +1718,10 @@
                         </p>
                     </div>
                     <div class="flex gap-2 flex-wrap">
-                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
-                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
-                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
-                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#f38ba8;color:#1e1e2e;" title="Cancela el envío y devuelve todos los ítems a Pendiente">🧩 Desarmar</button>
+                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-act btn-act-blue">⬇ Descargar</button>
+                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="btn-act btn-act-muted">＋ Agregar ítem</button>
+                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-act btn-act-green">✓ Marcar enviado</button>` : ''}
+                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="btn-act btn-act-red" title="Cancela el envío y devuelve todos los ítems a Pendiente">↩ Desarmar</button>
                     </div>
                 </div>
                 <details class="mt-3">
