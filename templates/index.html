@@ -96,25 +96,6 @@
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
 
-        /* Botones de acción del historial: relleno sólido, mismo lenguaje que btn-primary */
-        .btn-act {
-            display: inline-flex; align-items: center; gap: .4rem;
-            padding: .45rem .85rem; border-radius: .5rem;
-            font-size: .8125rem; font-weight: 600; letter-spacing: .01em;
-            border: none; color: #1e1e2e; cursor: pointer; white-space: nowrap;
-            transition: filter .15s ease, box-shadow .15s ease, transform .1s ease;
-        }
-        .btn-act:hover  { filter: brightness(1.08); }
-        .btn-act:active { transform: scale(.985); }
-        .btn-act-blue  { background: #8caee0; }
-        .btn-act-blue:hover  { box-shadow: 0 3px 12px rgba(140,174,224,.28); }
-        .btn-act-green { background: #9fcfa4; }
-        .btn-act-green:hover { box-shadow: 0 3px 12px rgba(159,207,164,.26); }
-        .btn-act-muted { background: #6b7089; color: #eef1f8; }
-        .btn-act-muted:hover { box-shadow: 0 3px 12px rgba(107,112,137,.3); }
-        .btn-act-red   { background: #dd9aa6; }
-        .btn-act-red:hover   { box-shadow: 0 3px 12px rgba(221,154,166,.28); }
-
         input, select { color-scheme: dark; }
         .field {
             background: var(--surface-2); border: 1px solid var(--border); border-radius: 0.5rem;
@@ -1718,10 +1699,10 @@
                         </p>
                     </div>
                     <div class="flex gap-2 flex-wrap">
-                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-act btn-act-blue">⬇ Descargar</button>
-                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="btn-act btn-act-muted">＋ Agregar ítem</button>
-                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-act btn-act-green">✓ Marcar enviado</button>` : ''}
-                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="btn-act btn-act-red" title="Cancela el envío y devuelve todos los ítems a Pendiente">↩ Desarmar</button>
+                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
+                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
+                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
+                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#f38ba8;color:#1e1e2e;" title="Cancela el envío y devuelve todos los ítems a Pendiente">🧩 Desarmar</button>
                     </div>
                 </div>
                 <details class="mt-3">
