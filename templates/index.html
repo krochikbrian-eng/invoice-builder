@@ -96,6 +96,14 @@
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
 
+        /* Botones del historial: mismo estilo relleno, paleta apagada */
+        .btn-hist {
+            color: #1a1b26; font-weight: 600;
+            transition: filter .15s ease, transform .1s ease;
+        }
+        .btn-hist:hover  { filter: brightness(1.07); }
+        .btn-hist:active { transform: scale(.985); }
+
         input, select { color-scheme: dark; }
         .field {
             background: var(--surface-2); border: 1px solid var(--border); border-radius: 0.5rem;
@@ -1699,10 +1707,10 @@
                         </p>
                     </div>
                     <div class="flex gap-2 flex-wrap">
-                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-primary px-3 py-1.5 rounded-lg text-sm">⬇ Descargar</button>
-                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#a6e3a1;color:#1e1e2e;" onmouseover="this.style.background='#94e2d5'" onmouseout="this.style.background='#a6e3a1'">➕ Agregar Ítem</button>
-                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-success px-3 py-1.5 rounded-lg text-sm">✓ Marcar Enviado</button>` : ''}
-                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="px-3 py-1.5 rounded-lg text-sm font-semibold" style="background:#f38ba8;color:#1e1e2e;" title="Cancela el envío y devuelve todos los ítems a Pendiente">🧩 Desarmar</button>
+                        <button onclick="downloadDoc(${inv.id}, '${inv.type || 'invoice'}')" class="btn-hist px-3 py-1.5 rounded-lg text-sm" style="background:#7f9ed4;">⬇ Descargar</button>
+                        <button onclick="openAddItemsModal(${inv.id}, '${inv.type || 'invoice'}', ${inv.invoice_number})" class="btn-hist px-3 py-1.5 rounded-lg text-sm" style="background:#8b93ad;">➕ Agregar Ítem</button>
+                        ${!inv.all_sent ? `<button onclick="markSent(${inv.id})" class="btn-hist px-3 py-1.5 rounded-lg text-sm" style="background:#86b191;">✓ Marcar Enviado</button>` : ''}
+                        <button onclick="unmakeInvoice(${inv.id}, ${inv.invoice_number}, '${inv.type || 'invoice'}')" class="btn-hist px-3 py-1.5 rounded-lg text-sm" style="background:#c4909b;" title="Cancela el envío y devuelve todos los ítems a Pendiente">🧩 Desarmar</button>
                     </div>
                 </div>
                 <details class="mt-3">
