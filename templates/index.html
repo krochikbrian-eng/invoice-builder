@@ -96,24 +96,24 @@
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
 
-        /* Botones de acción sobrios (historial): fondo translúcido + borde del color */
+        /* Botones de acción del historial: relleno sólido, mismo lenguaje que btn-primary */
         .btn-act {
             display: inline-flex; align-items: center; gap: .4rem;
-            padding: .4rem .75rem; border-radius: .5rem;
-            font-size: .8125rem; font-weight: 500; letter-spacing: .01em;
-            border: 1px solid transparent; background: transparent;
-            transition: background .15s ease, border-color .15s ease, color .15s ease;
-            cursor: pointer; white-space: nowrap;
+            padding: .45rem .85rem; border-radius: .5rem;
+            font-size: .8125rem; font-weight: 600; letter-spacing: .01em;
+            border: none; color: #1e1e2e; cursor: pointer; white-space: nowrap;
+            transition: filter .15s ease, box-shadow .15s ease, transform .1s ease;
         }
+        .btn-act:hover  { filter: brightness(1.08); }
         .btn-act:active { transform: scale(.985); }
-        .btn-act-blue   { color: #9db9e8; border-color: rgba(137,180,250,.28); background: rgba(137,180,250,.08); }
-        .btn-act-blue:hover   { background: rgba(137,180,250,.16); border-color: rgba(137,180,250,.45); color: #b8cdf2; }
-        .btn-act-green  { color: #9ccfa6; border-color: rgba(166,227,161,.26); background: rgba(166,227,161,.07); }
-        .btn-act-green:hover  { background: rgba(166,227,161,.14); border-color: rgba(166,227,161,.42); color: #b6e0bd; }
-        .btn-act-muted  { color: #a6adc8; border-color: rgba(166,173,200,.24); background: rgba(166,173,200,.06); }
-        .btn-act-muted:hover  { background: rgba(166,173,200,.13); border-color: rgba(166,173,200,.38); color: #c5cbdd; }
-        .btn-act-red    { color: #d99;    border-color: rgba(243,139,168,.24); background: rgba(243,139,168,.06); }
-        .btn-act-red:hover    { background: rgba(243,139,168,.14); border-color: rgba(243,139,168,.4);  color: #eaa7b6; }
+        .btn-act-blue  { background: #8caee0; }
+        .btn-act-blue:hover  { box-shadow: 0 3px 12px rgba(140,174,224,.28); }
+        .btn-act-green { background: #9fcfa4; }
+        .btn-act-green:hover { box-shadow: 0 3px 12px rgba(159,207,164,.26); }
+        .btn-act-muted { background: #6b7089; color: #eef1f8; }
+        .btn-act-muted:hover { box-shadow: 0 3px 12px rgba(107,112,137,.3); }
+        .btn-act-red   { background: #dd9aa6; }
+        .btn-act-red:hover   { box-shadow: 0 3px 12px rgba(221,154,166,.28); }
 
         input, select { color-scheme: dark; }
         .field {
