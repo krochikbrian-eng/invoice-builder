@@ -1338,6 +1338,7 @@ def generate_invoice():
     )
     conn.commit()
     conn.close()
+    bump_invoice_counter(company, invoice_number)
 
     # Try to send email if configured — individual files, no ZIP
     email_status = 'not_configured'
@@ -1484,6 +1485,7 @@ def generate_remito():
     )
     conn.commit()
     conn.close()
+    bump_invoice_counter(company, invoice_number)
 
     # Try to send email if configured — individual files, no ZIP
     email_status = 'not_configured'
@@ -1906,6 +1908,21 @@ def _apply_invoice_discount(inv, items):
         for it in items:
             it['price'] = round(it['price'] * (1 - d / 100), 1)
     return items
+
+def bump_invoice_counter(company, invoice_number):
+    """Persist the highest invoice number used, so it never goes backwards.
+
+    Sin esto, borrar/desarmar una factura liberaba su número (el próximo salía
+    de MAX(invoice_number)) y se reutilizaba.
+    """
+    try:
+        full = load_config()
+        cc = full['companies'][company]
+        if int(invoice_number) > int(cc.get('last_invoice_number', 0) or 0):
+            cc['last_invoice_number'] = int(invoice_number)
+            save_config(full)
+    except Exception:
+        app.logger.exception("No se pudo actualizar el contador de invoices")
 
 def adjust_invoice_total(conn, invoice_id, amount_delta=0.0, count_delta=0):
     """Adjust an invoice's total/items_count by a delta (keeps any discount intact)."""
