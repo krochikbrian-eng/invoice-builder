@@ -634,7 +634,7 @@ def generate_xlsx(invoice_number, invoice_date, items, company='zero'):
     ws['F3'] = invoice_date
     ws['F3'].font = Font(name='Arial', bold=True, size=10)
     ws['F3'].alignment = Alignment(horizontal='center')
-    ws['F3'].number_format = 'MM/DD/YYYY'
+    ws['F3'].number_format = 'DD/MM/YYYY'
 
     # Row 4: Customer
     ws.row_dimensions[4].height = 14.25
@@ -805,7 +805,7 @@ def generate_pdf(invoice_number, invoice_date, items, company='zero'):
         elements.append(Spacer(1, 6))
 
     # ── Header: address (left) + invoice info (right) in bordered table ──
-    date_str = invoice_date.strftime('%-m/%-d/%Y') if isinstance(invoice_date, (date, datetime)) else str(invoice_date)
+    date_str = invoice_date.strftime('%d/%m/%Y') if isinstance(invoice_date, (date, datetime)) else str(invoice_date)
     header_data = [
         [Paragraph(brand['sender'][0], bold11),
          Paragraph('Invoice #:', bold11),
