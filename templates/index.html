@@ -1078,7 +1078,13 @@
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2.5 text-xs">
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Precio</span>
-                            <p class="text-gray-300 font-medium">$${item.price.toFixed(2)} × ${item.qty}</p>
+                            <p class="text-gray-300 font-medium flex items-center gap-1">
+                                <span>$${item.price.toFixed(2)} ×</span>
+                                <input type="number" min="1" value="${item.qty}" title="Editar cantidad"
+                                       onclick="event.stopPropagation()"
+                                       onchange="event.stopPropagation(); changeItemQty(${item.id}, this.value, this)"
+                                       class="field text-xs text-center px-1 py-0.5" style="width:3.5rem;">
+                            </p>
                         </div>
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Tracking</span>
@@ -1875,6 +1881,40 @@
             }
         } catch (err) {
             toast('Error: ' + err.message, 'error');
+        }
+    }
+
+    // Editar la cantidad directamente desde la card
+    async function changeItemQty(itemId, rawQty, el) {
+        const item = allItems.find(i => i.id === itemId);
+        const prev = item ? item.qty : 1;
+        const qty = parseInt(rawQty);
+        if (!qty || qty <= 0) {
+            toast('Cantidad inválida', 'warning');
+            if (el) el.value = prev;
+            return;
+        }
+        if (qty === prev) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ qty })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                if (item) item.qty = qty;
+                const boxEntry = boxItems.get(itemId);
+                if (boxEntry) { boxEntry.item.qty = qty; boxEntry.qty = qty; renderBox(); }
+                toast(`Cantidad actualizada: ${qty}`, 'success');
+                loadItems();
+            } else {
+                toast(data.error || 'Error al cambiar la cantidad', 'error');
+                if (el) el.value = prev;
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+            if (el) el.value = prev;
         }
     }
 
