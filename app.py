@@ -541,8 +541,12 @@ def parse_csv(file_content, company='zero'):
         # "Subtotal de artículo" is the TOTAL for all units — divide by qty to get unit price
         unit_price = round(price / qty, 2) if qty > 0 else price
 
-        key = (order_id, asin, title)
-        existing_idx = next((i for i, x in enumerate(items) if (x['order_id'], x['asin'], x['title']) == key), None)
+        # El tracking forma parte de la clave: un mismo pedido puede llegar en varios
+        # envíos con trackings distintos y cada uno debe quedar como ítem separado.
+        # Solo se fusionan las filas que Amazon parte dentro del MISMO envío.
+        key = (order_id, asin, title, tracking)
+        existing_idx = next((i for i, x in enumerate(items)
+                             if (x['order_id'], x['asin'], x['title'], x['tracking']) == key), None)
         if existing_idx is not None:
             # Same item appears multiple times (Amazon splits units into separate rows) — merge
             prev = items[existing_idx]
@@ -1170,8 +1174,9 @@ def upload_csv():
     for item in items:
         # Check if this order_id + asin combo already exists (within the same company)
         existing = conn.execute(
-            "SELECT id FROM items WHERE order_id = ? AND asin = ? AND title = ? AND company = ?",
-            (item['order_id'], item['asin'], item['title'], company)
+            "SELECT id FROM items WHERE order_id = ? AND asin = ? AND title = ? AND company = ? "
+            "AND IFNULL(tracking, '') = ?",
+            (item['order_id'], item['asin'], item['title'], company, item['tracking'] or '')
         ).fetchone()
         if existing:
             skipped += 1
