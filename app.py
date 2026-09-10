@@ -120,6 +120,14 @@ def get_company():
 DEFAULT_CONFIG = {'accepted_pos': ['9999', '99999']}
 _COMPANY_KEYS = ('accepted_pos', 'last_invoice_number', 'email', 'smtp', 'sendgrid_api_key', 'sendgrid_from')
 
+# Cuenta de Amazon Business habilitada por empresa. El CSV trae la columna
+# "Correo electrónico del usuario de la cuenta": si no coincide, se rechaza el archivo.
+DEFAULT_ACCOUNT_EMAILS = {
+    'zero': ['zerointerllc@gmail.com'],
+    'lime': ['ironcladimportsllc@gmail.com'],
+}
+CSV_ACCOUNT_EMAIL_COL = 'Correo electrónico del usuario de la cuenta'
+
 def _migrate_config(cfg):
     """Ensure config has a per-company structure. Legacy flat config becomes 'zero'."""
     if not isinstance(cfg, dict):
@@ -156,6 +164,43 @@ def company_cfg(company=None):
 
 def get_accepted_pos(company=None):
     return company_cfg(company).get('accepted_pos', DEFAULT_CONFIG['accepted_pos'])
+
+def get_account_emails(company=None):
+    """Correos de cuenta de Amazon Business aceptados para esta empresa."""
+    if company not in VALID_COMPANIES:
+        company = get_company()
+    raw = company_cfg(company).get('account_emails')
+    if raw is None:
+        raw = DEFAULT_ACCOUNT_EMAILS.get(company, [])
+    if isinstance(raw, str):
+        raw = [raw]
+    return [str(e).strip().lower() for e in raw if str(e).strip()]
+
+def _norm_col(name):
+    """Normaliza el nombre de una columna del CSV (sin tildes, minúsculas)."""
+    import unicodedata
+    s = unicodedata.normalize('NFKD', str(name or ''))
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    return ' '.join(s.lower().replace('﻿', '').split())
+
+_ACCOUNT_COL_NORM = _norm_col(CSV_ACCOUNT_EMAIL_COL)
+
+def csv_account_emails(text):
+    """Devuelve el set de correos de cuenta presentes en el CSV (puede ser vacío)."""
+    reader = csv.DictReader(io.StringIO(text))
+    field = None
+    for f in (reader.fieldnames or []):
+        if _norm_col(f) == _ACCOUNT_COL_NORM:
+            field = f
+            break
+    if not field:
+        return None  # la columna no existe
+    found = set()
+    for row in reader:
+        val = clean_csv_value(row.get(field, '')).lower()
+        if val:
+            found.add(val)
+    return found
 
 def get_po_types(company=None):
     """Mapping PO -> item type (comercial/personal/especial/revisar) for CSV imports."""
@@ -492,16 +537,20 @@ def parse_price(val):
     except (ValueError, TypeError):
         return 0.0
 
-def parse_csv(file_content, company='zero'):
-    """Parse Amazon Business CSV — only import items with 'Estado de entrega' == 'Entregado'."""
-    # Try utf-8-sig first, then latin-1
+def decode_csv(file_content):
+    """Decode CSV bytes trying utf-8-sig, utf-8 and latin-1."""
+    if isinstance(file_content, str):
+        return file_content
     for encoding in ['utf-8-sig', 'utf-8', 'latin-1']:
         try:
-            text = file_content.decode(encoding)
-            break
+            return file_content.decode(encoding)
         except (UnicodeDecodeError, AttributeError):
-            if encoding == 'latin-1':
-                text = file_content.decode('latin-1', errors='replace')
+            continue
+    return file_content.decode('latin-1', errors='replace')
+
+def parse_csv(file_content, company='zero'):
+    """Parse Amazon Business CSV — only import items with 'Estado de entrega' == 'Entregado'."""
+    text = decode_csv(file_content)
 
     reader = csv.DictReader(io.StringIO(text))
     items = []
@@ -1161,7 +1210,34 @@ def upload_csv():
 
     company = get_company()
     content = file.read()
-    items = parse_csv(content, company)
+    text = decode_csv(content)
+
+    # ── Validación de cuenta: el CSV tiene que ser de la cuenta de Amazon Business
+    #    configurada para la empresa activa. Evita cargar archivos de Zero en Lime.
+    allowed = get_account_emails(company)
+    if allowed:
+        found = csv_account_emails(text)
+        if found is None:
+            return jsonify({
+                'error': f'El archivo no tiene la columna "{CSV_ACCOUNT_EMAIL_COL}", '
+                         f'no se puede validar a qué cuenta pertenece.'
+            }), 400
+        if not found:
+            return jsonify({
+                'error': f'El archivo no tiene ningún correo en "{CSV_ACCOUNT_EMAIL_COL}".'
+            }), 400
+        invalid = sorted(found - set(allowed))
+        if invalid:
+            otra = next((COMPANY_NAMES[c] for c in VALID_COMPANIES
+                         if c != company and set(invalid) & set(get_account_emails(c))), None)
+            msg = (f'Este archivo es de la cuenta {", ".join(invalid)} y '
+                   f'{COMPANY_NAMES[company]} solo acepta {", ".join(allowed)}.')
+            if otra:
+                msg += f' Cambiá la empresa a {otra} y subilo de nuevo.'
+            return jsonify({'error': msg, 'wrong_account': True,
+                            'found': invalid, 'allowed': allowed}), 400
+
+    items = parse_csv(text, company)
 
     if not items:
         return jsonify({'error': 'No items found with "Estado de entrega" = Entregado'}), 400
@@ -2101,6 +2177,34 @@ def delete_item(item_id):
 def get_po_config():
     company = get_company()
     return jsonify({'pos': get_accepted_pos(company), 'types': get_po_types(company)})
+
+@app.route('/api/config/account-emails', methods=['GET'])
+def get_account_emails_config():
+    company = get_company()
+    return jsonify({
+        'company': company,
+        'company_name': COMPANY_NAMES[company],
+        'emails': get_account_emails(company),
+        'column': CSV_ACCOUNT_EMAIL_COL,
+    })
+
+@app.route('/api/config/account-emails', methods=['PUT'])
+def set_account_emails_config():
+    data = request.get_json() or {}
+    emails = data.get('emails', [])
+    if isinstance(emails, str):
+        emails = [e for e in emails.replace(';', ',').replace('\n', ',').split(',')]
+    if not isinstance(emails, list):
+        return jsonify({'error': 'Debe enviar una lista de correos'}), 400
+    clean = list(dict.fromkeys(str(e).strip().lower() for e in emails if str(e).strip()))
+    for e in clean:
+        if '@' not in e or ' ' in e:
+            return jsonify({'error': f'Correo inválido: {e}'}), 400
+    company = get_company()
+    full = load_config()
+    full['companies'][company]['account_emails'] = clean
+    save_config(full)
+    return jsonify({'emails': clean})
 
 @app.route('/api/config/invoice-counter', methods=['GET'])
 def get_invoice_counter():

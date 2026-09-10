@@ -536,6 +536,22 @@
                     </div>
                 </div>
 
+                <!-- Cuenta de Amazon habilitada -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">🔒 Cuenta de Amazon habilitada</h3>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Solo se aceptan CSV cuya columna <span class="font-mono">Correo electrónico del usuario de la cuenta</span>
+                        coincida con estos correos. Si no coincide, el archivo se rechaza.
+                    </p>
+                    <div id="acc-list" class="flex flex-wrap gap-2 mb-3"></div>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-acc-email" placeholder="cuenta@gmail.com"
+                               class="field flex-1 px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')addAccountEmail()">
+                        <button onclick="addAccountEmail()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">+ Agregar</button>
+                    </div>
+                </div>
+
                 <!-- Invoice Counter -->
                 <div class="card p-5">
                     <h3 class="text-sm font-semibold text-gray-300 mb-1">Contador de Invoice</h3>
@@ -738,6 +754,56 @@
         saveAcceptedPOs(pos);
         renderPOs();
         toast(`PO "${po}" eliminado`, 'success');
+    }
+
+    // ─── Cuenta de Amazon habilitada (por empresa) ──────────────────────
+    let accountEmails = [];
+    function renderAccountEmails() {
+        const list = document.getElementById('acc-list');
+        if (!list) return;
+        if (!accountEmails.length) {
+            list.innerHTML = '<span class="text-xs text-gray-500">Sin restricción: se acepta cualquier cuenta.</span>';
+            return;
+        }
+        list.innerHTML = accountEmails.map(e => `
+            <span class="inline-flex items-center gap-2 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full pl-3 pr-2 py-1 text-sm font-mono">
+                ${escHtml(e)}
+                <button onclick="removeAccountEmail('${escAttr(e)}')" class="text-emerald-400/60 hover:text-red-400 transition-colors">&times;</button>
+            </span>`).join('');
+    }
+    async function loadAccountEmails() {
+        try {
+            const res = await fetch('/api/config/account-emails');
+            const data = await res.json();
+            accountEmails = data.emails || [];
+            renderAccountEmails();
+        } catch (e) {}
+    }
+    async function saveAccountEmails(emails) {
+        const res = await fetch('/api/config/account-emails', {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({emails})
+        });
+        const data = await res.json();
+        if (!res.ok) { toast(data.error || 'Error al guardar', 'error'); return false; }
+        accountEmails = data.emails || [];
+        renderAccountEmails();
+        return true;
+    }
+    async function addAccountEmail() {
+        const input = document.getElementById('new-acc-email');
+        const val = input.value.trim().toLowerCase();
+        if (!val) return;
+        if (accountEmails.includes(val)) { toast('Ese correo ya está', 'error'); return; }
+        if (await saveAccountEmails([...accountEmails, val])) {
+            input.value = '';
+            toast(`Cuenta "${val}" habilitada`, 'success');
+        }
+    }
+    async function removeAccountEmail(email) {
+        if (await saveAccountEmails(accountEmails.filter(e => e !== email))) {
+            toast(`Cuenta "${email}" quitada`, 'success');
+        }
     }
 
     // ─── Invoice Counter ────────────────────────────────────────────────
@@ -960,7 +1026,7 @@
         });
         if (name === 'items') loadItems();
         if (name === 'history') loadHistory();
-        if (name === 'config') { renderPOs(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+        if (name === 'config') { renderPOs(); loadAccountEmails(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
         localStorage.setItem('lastTab', name);
     }
 
@@ -1033,6 +1099,15 @@
             if (res.ok) {
                 toast(`${data.message}`, 'success');
                 showTab('items');
+            } else if (data.wrong_account) {
+                confirmDialog({
+                    icon: '🚫',
+                    title: 'Archivo de otra cuenta',
+                    message: data.error,
+                    confirmText: 'Entendido',
+                    cancelText: '',
+                    confirmClass: 'btn-primary'
+                });
             } else {
                 toast(data.error || 'Error al subir', 'error');
             }
