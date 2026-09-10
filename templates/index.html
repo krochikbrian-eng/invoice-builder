@@ -67,6 +67,12 @@
         }
         /* Status accent stripe */
         .item-card { position: relative; overflow: hidden; }
+        /* Destello al guardar un cambio, para identificar qué tarjeta se editó */
+        @keyframes savedFlash {
+            0%   { box-shadow: 0 0 0 2px rgba(166,227,161,.85); background: rgba(166,227,161,.10); }
+            100% { box-shadow: 0 0 0 2px rgba(166,227,161,0);   background: transparent; }
+        }
+        .item-card.just-saved { animation: savedFlash 1.4s ease-out; }
         .item-card::before {
             content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
             background: var(--blue); opacity: .85;
@@ -1884,6 +1890,16 @@
         }
     }
 
+    // Resalta brevemente la tarjeta editada (hay ítems con títulos idénticos)
+    function flashItemCard(itemId) {
+        const card = document.querySelector(`.item-card[data-id="${itemId}"]`);
+        if (!card) return;
+        card.classList.remove('just-saved');
+        void card.offsetWidth;              // reinicia la animación
+        card.classList.add('just-saved');
+        setTimeout(() => card.classList.remove('just-saved'), 1500);
+    }
+
     // Editar la cantidad directamente desde la card
     async function changeItemQty(itemId, rawQty, el) {
         const item = allItems.find(i => i.id === itemId);
@@ -1907,7 +1923,8 @@
                 const boxEntry = boxItems.get(itemId);
                 if (boxEntry) { boxEntry.item.qty = qty; boxEntry.qty = qty; renderBox(); }
                 toast(`Cantidad actualizada: ${qty}`, 'success');
-                loadItems();
+                await loadItems();
+                flashItemCard(itemId);
             } else {
                 toast(data.error || 'Error al cambiar la cantidad', 'error');
                 if (el) el.value = prev;
