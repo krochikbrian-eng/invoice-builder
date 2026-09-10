@@ -590,6 +590,29 @@
                     </div>
                 </div>
 
+                <!-- Mantenimiento: ítems repetidos entre empresas -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">🧹 Ítems repetidos entre empresas</h3>
+                    <p class="text-xs text-gray-400 mb-3">Busca ítems que estén cargados en las dos empresas y los elimina de una de ellas. Manda la empresa de origen: sus ítems quedan intactos.</p>
+                    <div class="flex items-center gap-2 flex-wrap mb-3 text-sm">
+                        <span class="text-xs text-gray-500">Manda</span>
+                        <select id="dup-source" class="field px-2 py-1 text-sm cursor-pointer">
+                            <option value="lime">Lime</option>
+                            <option value="zero">Zero</option>
+                        </select>
+                        <span class="text-xs text-gray-500">→ limpiar de</span>
+                        <select id="dup-target" class="field px-2 py-1 text-sm cursor-pointer">
+                            <option value="zero">Zero</option>
+                            <option value="lime">Lime</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <button onclick="checkCrossDuplicates()" class="btn-ghost px-4 py-2 rounded-md text-sm font-medium">🔍 Revisar</button>
+                        <button onclick="cleanCrossDuplicates()" id="dup-clean-btn" class="px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed" style="background:#c4909b;color:#1a1b26;" disabled>🧹 Eliminar duplicados</button>
+                    </div>
+                    <div id="dup-result" class="text-xs text-gray-400 mt-3"></div>
+                </div>
+
             </div>
         </section>
     </main>
@@ -864,6 +887,68 @@
             }
         } catch(e) { toast('Error: ' + e.message, 'error'); }
         finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
+    }
+
+    // ─── Mantenimiento: duplicados entre empresas ───────────────────────
+    async function checkCrossDuplicates() {
+        const source = document.getElementById('dup-source').value;
+        const target = document.getElementById('dup-target').value;
+        const out = document.getElementById('dup-result');
+        const btn = document.getElementById('dup-clean-btn');
+        if (source === target) { out.textContent = 'Elegí dos empresas distintas.'; btn.disabled = true; return; }
+        out.textContent = 'Revisando...';
+        try {
+            const res = await fetch(`/api/maintenance/cross-duplicates?source=${source}&target=${target}`);
+            const d = await res.json();
+            if (!res.ok) { out.textContent = d.error || 'Error'; btn.disabled = true; return; }
+            if (d.total === 0) {
+                out.innerHTML = `<span class="text-green-400">✓ No hay ítems de ${COMPANY_NAMES[source]} repetidos en ${COMPANY_NAMES[target]}.</span>`;
+                btn.disabled = true;
+                return;
+            }
+            const sample = d.items.slice(0, 8).map(i =>
+                `<div class="truncate">• ${escHtml(i.title)} <span class="text-gray-500 font-mono">${escHtml(i.tracking || '—')}</span> · ${i.status}</div>`
+            ).join('');
+            out.innerHTML = `<div class="mb-1"><strong class="text-yellow-300">${d.total}</strong> ítem(s) de ${COMPANY_NAMES[target]} también están en ${COMPANY_NAMES[source]}:
+                <strong>${d.pendientes}</strong> pendientes · <strong>${d.ya_facturados}</strong> ya facturados (no se tocan).</div>
+                ${sample}${d.total > 8 ? `<div class="text-gray-500">…y ${d.total - 8} más</div>` : ''}`;
+            btn.disabled = d.pendientes === 0;
+        } catch (e) {
+            out.textContent = 'Error: ' + e.message;
+            btn.disabled = true;
+        }
+    }
+
+    async function cleanCrossDuplicates() {
+        const source = document.getElementById('dup-source').value;
+        const target = document.getElementById('dup-target').value;
+        const confirmed = await confirmDialog({
+            title: 'Eliminar duplicados',
+            message: `Se van a eliminar de ${COMPANY_NAMES[target]} los ítems PENDIENTES que también están en ${COMPANY_NAMES[source]}.\n\nLos ítems de ${COMPANY_NAMES[source]} no se tocan, y los que ya estén facturados en ${COMPANY_NAMES[target]} tampoco.\n\nEsta acción no se puede deshacer.`,
+            confirmText: '🧹 Eliminar',
+            confirmClass: 'btn-danger',
+            icon: '🧹'
+        });
+        if (!confirmed) return;
+        const out = document.getElementById('dup-result');
+        out.textContent = 'Eliminando...';
+        try {
+            const res = await fetch('/api/maintenance/cross-duplicates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source, target })
+            });
+            const d = await res.json();
+            if (res.ok) {
+                out.innerHTML = `<span class="text-green-400">✓ Eliminados ${d.eliminados} ítem(s) de ${COMPANY_NAMES[target]}.</span>` +
+                    (d.omitidos_facturados ? ` <span class="text-yellow-300">${d.omitidos_facturados} omitidos por estar facturados.</span>` : '');
+                toast(`${d.eliminados} ítem(s) eliminados`, 'success');
+                document.getElementById('dup-clean-btn').disabled = true;
+                loadItems();
+            } else {
+                out.textContent = d.error || 'Error al eliminar';
+            }
+        } catch (e) { out.textContent = 'Error: ' + e.message; }
     }
 
     // ─── Tabs ───────────────────────────────────────────────────────────

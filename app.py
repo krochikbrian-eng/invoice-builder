@@ -2267,6 +2267,89 @@ def set_mailgun_config():
     return jsonify({'ok': True, 'api_key_set': bool(api_key), 'domain': domain,
                     'from_email': from_email, 'region': cc.get('mailgun_region', 'us')})
 
+def _find_cross_company_dupes(source, target):
+    """Ítems de `target` que también existen en `source` (source manda).
+
+    Se consideran el mismo ítem si comparten tracking (cuando ambos lo tienen)
+    o, si no hay tracking, la combinación pedido + ASIN + título.
+    """
+    conn = get_db()
+    src = conn.execute("SELECT order_id, asin, title, tracking FROM items WHERE company = ?", (source,)).fetchall()
+    tgt = conn.execute(
+        "SELECT id, order_id, asin, title, tracking, qty, price, status, invoice_id "
+        "FROM items WHERE company = ?", (target,)
+    ).fetchall()
+    conn.close()
+
+    src_tracking = {(r['tracking'] or '').strip() for r in src if (r['tracking'] or '').strip()}
+    src_triple = {((r['order_id'] or '').strip(), (r['asin'] or '').strip(), (r['title'] or '').strip()) for r in src}
+
+    dupes = []
+    for r in tgt:
+        trk = (r['tracking'] or '').strip()
+        by_tracking = bool(trk) and trk in src_tracking
+        by_triple = ((r['order_id'] or '').strip(), (r['asin'] or '').strip(), (r['title'] or '').strip()) in src_triple
+        if by_tracking or by_triple:
+            dupes.append({
+                'id': r['id'],
+                'title': (r['title'] or '')[:60],
+                'tracking': trk,
+                'qty': r['qty'],
+                'price': r['price'],
+                'status': r['status'],
+                'invoice_id': r['invoice_id'],
+                'match': 'tracking' if by_tracking else 'pedido+asin+titulo',
+            })
+    return dupes
+
+@app.route('/api/maintenance/cross-duplicates', methods=['GET'])
+def cross_duplicates_report():
+    """Reporte (solo lectura) de ítems de `target` que ya existen en `source`."""
+    source = request.args.get('source', 'lime').strip().lower()
+    target = request.args.get('target', 'zero').strip().lower()
+    if source not in VALID_COMPANIES or target not in VALID_COMPANIES or source == target:
+        return jsonify({'error': 'Empresas inválidas'}), 400
+    dupes = _find_cross_company_dupes(source, target)
+    pend = [d for d in dupes if d['status'] == 'pending']
+    used = [d for d in dupes if d['status'] != 'pending']
+    return jsonify({
+        'source': source, 'target': target,
+        'total': len(dupes),
+        'pendientes': len(pend),
+        'ya_facturados': len(used),
+        'items': dupes,
+    })
+
+@app.route('/api/maintenance/cross-duplicates', methods=['POST'])
+def cross_duplicates_cleanup():
+    """Borra de `target` los ítems que ya existen en `source`.
+
+    Por defecto solo elimina los PENDIENTES: borrar uno ya facturado alteraría
+    una factura emitida. Con include_invoiced=true se borran también esos.
+    """
+    data = request.get_json(silent=True) or {}
+    source = str(data.get('source', 'lime')).strip().lower()
+    target = str(data.get('target', 'zero')).strip().lower()
+    include_invoiced = bool(data.get('include_invoiced'))
+    if source not in VALID_COMPANIES or target not in VALID_COMPANIES or source == target:
+        return jsonify({'error': 'Empresas inválidas'}), 400
+
+    dupes = _find_cross_company_dupes(source, target)
+    to_delete = dupes if include_invoiced else [d for d in dupes if d['status'] == 'pending']
+    skipped = [d for d in dupes if d not in to_delete]
+    if to_delete:
+        conn = get_db()
+        ids = [d['id'] for d in to_delete]
+        conn.execute(f"DELETE FROM items WHERE id IN ({','.join('?' * len(ids))})", ids)
+        conn.commit()
+        conn.close()
+    return jsonify({
+        'ok': True,
+        'eliminados': len(to_delete),
+        'omitidos_facturados': len(skipped),
+        'detalle_omitidos': skipped[:50],
+    })
+
 @app.route('/sw.js')
 def service_worker():
     return send_file(os.path.join(BASE_DIR, 'static', 'sw.js'), mimetype='application/javascript')
