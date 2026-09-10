@@ -2281,13 +2281,16 @@ def _find_cross_company_dupes(source, target):
     ).fetchall()
     conn.close()
 
-    src_tracking = {(r['tracking'] or '').strip() for r in src if (r['tracking'] or '').strip()}
+    # El tracking solo no alcanza: hay placeholders manuales repetidos (ej. "estanendepo")
+    # que harían coincidir productos distintos. Se exige también el mismo título.
+    src_track_title = {((r['tracking'] or '').strip(), (r['title'] or '').strip())
+                       for r in src if (r['tracking'] or '').strip()}
     src_triple = {((r['order_id'] or '').strip(), (r['asin'] or '').strip(), (r['title'] or '').strip()) for r in src}
 
     dupes = []
     for r in tgt:
         trk = (r['tracking'] or '').strip()
-        by_tracking = bool(trk) and trk in src_tracking
+        by_tracking = bool(trk) and (trk, (r['title'] or '').strip()) in src_track_title
         by_triple = ((r['order_id'] or '').strip(), (r['asin'] or '').strip(), (r['title'] or '').strip()) in src_triple
         if by_tracking or by_triple:
             dupes.append({
