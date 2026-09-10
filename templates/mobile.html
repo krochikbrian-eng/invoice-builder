@@ -1560,6 +1560,15 @@ function escHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+function escAttr(str) {
+    // para usar dentro de strings JS entre comillas simples en atributos HTML
+    return String(str == null ? '' : str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {

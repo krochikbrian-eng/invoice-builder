@@ -1115,6 +1115,10 @@
             toast('Error de subida: ' + err.message, 'error');
         } finally {
             status.classList.add('hidden');
+            // Reseteamos el input para poder volver a elegir el MISMO archivo
+            // (p. ej. tras cambiar de empresa cuando la cuenta no coincidía).
+            const csvInput = document.getElementById('csv-input');
+            if (csvInput) csvInput.value = '';
         }
     }
 

@@ -64,6 +64,8 @@ CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 # ─── Company ────────────────────────────────────────────────────────────────
 VALID_COMPANIES = ('zero', 'lime')
 COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
+# Etiquetas cortas, iguales a las del switch de empresa en la UI
+COMPANY_UI_NAMES = {'zero': 'Zero', 'lime': 'Limesquare'}
 
 # Per-company branding for the generated invoice (logo, header sender/customer, footer bank/warranty)
 INVOICE_BRAND = {
@@ -1228,10 +1230,10 @@ def upload_csv():
             }), 400
         invalid = sorted(found - set(allowed))
         if invalid:
-            otra = next((COMPANY_NAMES[c] for c in VALID_COMPANIES
+            otra = next((COMPANY_UI_NAMES[c] for c in VALID_COMPANIES
                          if c != company and set(invalid) & set(get_account_emails(c))), None)
             msg = (f'Este archivo es de la cuenta {", ".join(invalid)} y '
-                   f'{COMPANY_NAMES[company]} solo acepta {", ".join(allowed)}.')
+                   f'{COMPANY_UI_NAMES[company]} solo acepta {", ".join(allowed)}.')
             if otra:
                 msg += f' Cambiá la empresa a {otra} y subilo de nuevo.'
             return jsonify({'error': msg, 'wrong_account': True,
