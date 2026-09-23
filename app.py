@@ -622,10 +622,36 @@ def parse_csv(file_content, company='zero'):
 
     return items
 
+def merge_invoice_rows(items, by_price=True):
+    """Unifica en una sola fila los ítems con el MISMO título exacto y el MISMO
+    precio unitario, sumando las cantidades. Si el precio unitario difiere, las
+    filas quedan separadas (el total de la factura nunca cambia).
+
+    Con by_price=False agrupa solo por título — se usa en el remito SIN precios,
+    donde no hay columna de precio ni total que se pueda distorsionar.
+
+    Solo afecta a los documentos generados (xlsx/pdf/remito); no toca la base
+    ni el listado de ítems, así que los trackings siguen viéndose uno por uno.
+    """
+    merged = []
+    index = {}
+    for item in items:
+        title = (item.get('title') or '').strip()
+        key = (title, round(float(item.get('price') or 0), 4)) if by_price else (title,)
+        pos = index.get(key)
+        if pos is None:
+            copy = dict(item)
+            index[key] = len(merged)
+            merged.append(copy)
+        else:
+            merged[pos]['qty'] = int(merged[pos]['qty']) + int(item['qty'])
+    return merged
+
 # ─── XLSX Generation ────────────────────────────────────────────────────────
 
 def generate_xlsx(invoice_number, invoice_date, items, company='zero'):
     """Generate XLSX invoice using the per-company branding."""
+    items = merge_invoice_rows(items)
     brand = invoice_brand(company)
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -824,6 +850,7 @@ def generate_xlsx(invoice_number, invoice_date, items, company='zero'):
 
 def generate_pdf(invoice_number, invoice_date, items, company='zero'):
     """Generate a PDF invoice using the per-company branding."""
+    items = merge_invoice_rows(items)
     brand = invoice_brand(company)
     output = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -1010,6 +1037,7 @@ def generate_pdf(invoice_number, invoice_date, items, company='zero'):
 
 def generate_remito_pdf(invoice_number, invoice_date, items):
     """Generate a simple remito PDF — austere, no logo, Helvetica."""
+    items = merge_invoice_rows(items)
     output = io.BytesIO()
     doc = SimpleDocTemplate(
         output, pagesize=letter,
@@ -1115,6 +1143,8 @@ def generate_remito_pdf(invoice_number, invoice_date, items):
 
 def generate_remito_pdf_no_prices(invoice_number, invoice_date, items):
     """Generate a remito PDF WITHOUT prices — only Qty and Descripción."""
+    # Sin columna de precio ni total: acá alcanza con que el título sea igual.
+    items = merge_invoice_rows(items, by_price=False)
     output = io.BytesIO()
     doc = SimpleDocTemplate(
         output, pagesize=letter,
