@@ -208,7 +208,7 @@
     </div>
 
     <!-- Manual item modal -->
-    <div id="manual-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeManualItemModal()">
+    <div id="manual-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
         <div class="card p-6 mx-auto w-full max-w-md anim-in">
             <h3 class="text-lg font-semibold mb-4">➕ Agregar ítem manual</h3>
             <div class="space-y-3">
@@ -254,7 +254,7 @@
     </div>
 
     <!-- Edit item modal -->
-    <div id="edit-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeEditItemModal()">
+    <div id="edit-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
         <div class="card p-6 mx-auto w-full max-w-md anim-in">
             <h3 class="text-lg font-semibold mb-4">✏️ Editar ítem</h3>
             <input type="hidden" id="ei-id">
@@ -300,7 +300,7 @@
     </div>
 
     <!-- Add Items to Invoice modal -->
-    <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop" onclick="if(event.target===this)closeAddItemsModal()">
+    <div id="add-items-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
         <div class="card p-6 mx-auto w-full max-w-2xl anim-in" style="max-height:85vh;display:flex;flex-direction:column;">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold">➕ Agregar ítems al <span id="add-items-modal-title">Invoice</span></h3>
