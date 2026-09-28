@@ -589,6 +589,24 @@ def decode_csv(file_content):
             continue
     return file_content.decode('latin-1', errors='replace')
 
+def normalize_order_date(value, lang):
+    """Devuelve la fecha del pedido siempre como DD/MM/YYYY.
+
+    Amazon exporta la fecha en el formato del idioma del reporte: el español
+    viene DD/MM/YYYY y el inglés MM/DD/YYYY (mismo pedido, "10/09/2026" vs
+    "09/10/2026"). Guardamos todo en DD/MM/YYYY, que es lo que ya hay en la
+    base, lo que usa el alta manual y lo que espera el front para ordenar.
+    """
+    raw = clean_csv_value(value)
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$', raw)
+    if not m:
+        return raw
+    a, b, y = int(m.group(1)), int(m.group(2)), m.group(3)
+    day, month = (b, a) if lang == 'en' else (a, b)
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return raw
+    return f'{day:02d}/{month:02d}/{y}'
+
 def parse_csv(file_content, company='zero'):
     """Parse Amazon Business CSV — solo importa los ítems entregados.
 
@@ -599,6 +617,7 @@ def parse_csv(file_content, company='zero'):
 
     reader = csv.DictReader(io.StringIO(text))
     fmap = csv_field_map(reader.fieldnames)
+    lang = csv_lang(fmap)
     items = []
     accepted_pos = get_accepted_pos(company)
 
@@ -623,7 +642,7 @@ def parse_csv(file_content, company='zero'):
         tracking = clean_csv_value(cell(row, fmap, 'tracking'))
         qty_str = cell(row, fmap, 'qty', '1')
         price_str = cell(row, fmap, 'subtotal', '0')
-        fecha = cell(row, fmap, 'order_date').strip()
+        fecha = normalize_order_date(cell(row, fmap, 'order_date'), lang)
         estado = cell(row, fmap, 'order_status').strip()
         total_neto_str = cell(row, fmap, 'net_total', '0')
 
@@ -1293,7 +1312,8 @@ def upload_csv():
     #    archivo no se parece a un reporte de Amazon Business.
     header = csv.DictReader(io.StringIO(text)).fieldnames
     fmap = csv_field_map(header)
-    missing = [k for k in ('po', 'delivery', 'title') if k not in fmap]
+    missing = [k for k in ('po', 'delivery', 'title', 'order_id', 'qty', 'subtotal', 'tracking')
+               if k not in fmap]
     if missing:
         faltan = ' / '.join('"%s"' % CSV_ALIASES[k][0] for k in missing)
         return jsonify({
@@ -1330,10 +1350,11 @@ def upload_csv():
     items = parse_csv(text, company)
 
     if not items:
-        entregado = 'Delivered' if csv_lang(fmap) == 'en' else 'Entregado'
+        en = csv_lang(fmap) == 'en'
         return jsonify({
-            'error': f'No se encontró ningún ítem con "{CSV_ALIASES["delivery"][0] if csv_lang(fmap)=="es" else "Delivery Status"}" '
-                     f'= {entregado} y un PO aceptado ({", ".join(get_accepted_pos(company))}).'
+            'error': f'No se encontró ningún ítem con "{fmap["delivery"]}" = '
+                     f'{"Delivered" if en else "Entregado"} y un PO aceptado '
+                     f'({", ".join(get_accepted_pos(company))}).'
         }), 400
 
     # Save to DB, skip duplicates
