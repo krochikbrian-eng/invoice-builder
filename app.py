@@ -130,6 +130,27 @@ DEFAULT_ACCOUNT_EMAILS = {
 }
 CSV_ACCOUNT_EMAIL_COL = 'Correo electrónico del usuario de la cuenta'
 
+# ─── Columnas del CSV de Amazon Business (español e inglés) ──────────────────
+# Amazon exporta el mismo reporte con los encabezados en el idioma de la cuenta.
+# Cada clave lógica lista los nombres posibles; el primero es el que se muestra
+# en los mensajes de error.
+CSV_ALIASES = {
+    'po':            ['Número de PO', 'PO Number'],
+    'delivery':      ['Estado de entrega', 'Delivery Status'],
+    'title':         ['Cargo', 'Title'],
+    'asin':          ['ASIN'],
+    'order_id':      ['Id. de pedido', 'Order ID'],
+    'tracking':      ['N.º de seguimiento del transportista', 'Carrier Tracking #'],
+    'qty':           ['Cantidad de artículos', 'Item Quantity'],
+    'subtotal':      ['Subtotal de artículo', 'Item Subtotal'],
+    'order_date':    ['Fecha del pedido', 'Order Date'],
+    'order_status':  ['Estado del pedido', 'Order Status'],
+    'net_total':     ['Total neto del artículo', 'Item Net Total'],
+    'account_email': [CSV_ACCOUNT_EMAIL_COL, 'Account User Email'],
+}
+# Valor de "Estado de entrega" / "Delivery Status" que habilita la importación.
+DELIVERED_VALUES = {'entregado', 'delivered'}
+
 def _migrate_config(cfg):
     """Ensure config has a per-company structure. Legacy flat config becomes 'zero'."""
     if not isinstance(cfg, dict):
@@ -185,21 +206,39 @@ def _norm_col(name):
     s = ''.join(ch for ch in s if not unicodedata.combining(ch))
     return ' '.join(s.lower().replace('﻿', '').split())
 
-_ACCOUNT_COL_NORM = _norm_col(CSV_ACCOUNT_EMAIL_COL)
+_ALIAS_NORM = {k: [_norm_col(n) for n in names] for k, names in CSV_ALIASES.items()}
+
+def csv_field_map(fieldnames):
+    """clave lógica -> nombre real de la columna, resolviendo español/inglés."""
+    by_norm = {}
+    for f in (fieldnames or []):
+        by_norm.setdefault(_norm_col(f), f)
+    out = {}
+    for key, norms in _ALIAS_NORM.items():
+        for n in norms:
+            if n in by_norm:
+                out[key] = by_norm[n]
+                break
+    return out
+
+def csv_lang(fmap):
+    """'en' si el archivo trae los encabezados en inglés, 'es' si no."""
+    title = fmap.get('title') or fmap.get('delivery') or ''
+    return 'en' if _norm_col(title) in ('title', 'delivery status') else 'es'
+
+def cell(row, fmap, key, default=''):
+    f = fmap.get(key)
+    return row.get(f, default) if f else default
 
 def csv_account_emails(text):
     """Devuelve el set de correos de cuenta presentes en el CSV (puede ser vacío)."""
     reader = csv.DictReader(io.StringIO(text))
-    field = None
-    for f in (reader.fieldnames or []):
-        if _norm_col(f) == _ACCOUNT_COL_NORM:
-            field = f
-            break
-    if not field:
-        return None  # la columna no existe
+    fmap = csv_field_map(reader.fieldnames)
+    if 'account_email' not in fmap:
+        return None  # la columna no existe en ninguno de los dos idiomas
     found = set()
     for row in reader:
-        val = clean_csv_value(row.get(field, '')).lower()
+        val = clean_csv_value(cell(row, fmap, 'account_email')).lower()
         if val:
             found.add(val)
     return found
@@ -551,37 +590,42 @@ def decode_csv(file_content):
     return file_content.decode('latin-1', errors='replace')
 
 def parse_csv(file_content, company='zero'):
-    """Parse Amazon Business CSV — only import items with 'Estado de entrega' == 'Entregado'."""
+    """Parse Amazon Business CSV — solo importa los ítems entregados.
+
+    Soporta el reporte con los encabezados en español ("Estado de entrega" =
+    "Entregado") y en inglés ("Delivery Status" = "Delivered").
+    """
     text = decode_csv(file_content)
 
     reader = csv.DictReader(io.StringIO(text))
+    fmap = csv_field_map(reader.fieldnames)
     items = []
     accepted_pos = get_accepted_pos(company)
 
     for row in reader:
         # FILTER 1: only accepted POs (configurable)
-        po_raw = row.get('Número de PO', '')
+        po_raw = cell(row, fmap, 'po')
         po_clean = clean_csv_value(po_raw)
         if po_clean not in accepted_pos:
             continue
 
-        # FILTER 2: only "Entregado" delivery status
-        estado_entrega = row.get('Estado de entrega', '').strip()
-        if estado_entrega != 'Entregado':
+        # FILTER 2: solo entregados (Entregado / Delivered)
+        estado_entrega = clean_csv_value(cell(row, fmap, 'delivery')).lower()
+        if estado_entrega not in DELIVERED_VALUES:
             continue
 
-        title = row.get('Cargo', '').strip()
+        title = cell(row, fmap, 'title').strip()
         if not title:
             continue
 
-        asin = clean_csv_value(row.get('ASIN', ''))
-        order_id = row.get('Id. de pedido', '').strip()
-        tracking = clean_csv_value(row.get('N.º de seguimiento del transportista', ''))
-        qty_str = row.get('Cantidad de artículos', '1')
-        price_str = row.get('Subtotal de artículo', '0')
-        fecha = row.get('Fecha del pedido', '').strip()
-        estado = row.get('Estado del pedido', '').strip()
-        total_neto_str = row.get('Total neto del artículo', '0')
+        asin = clean_csv_value(cell(row, fmap, 'asin'))
+        order_id = cell(row, fmap, 'order_id').strip()
+        tracking = clean_csv_value(cell(row, fmap, 'tracking'))
+        qty_str = cell(row, fmap, 'qty', '1')
+        price_str = cell(row, fmap, 'subtotal', '0')
+        fecha = cell(row, fmap, 'order_date').strip()
+        estado = cell(row, fmap, 'order_status').strip()
+        total_neto_str = cell(row, fmap, 'net_total', '0')
 
         qty = int(clean_csv_value(qty_str) or '1')
         if qty <= 0:
@@ -1244,19 +1288,33 @@ def upload_csv():
     content = file.read()
     text = decode_csv(content)
 
+    # ── El reporte de Amazon viene en español o en inglés según el idioma de la
+    #    cuenta. Resolvemos los encabezados antes de nada y avisamos si el
+    #    archivo no se parece a un reporte de Amazon Business.
+    header = csv.DictReader(io.StringIO(text)).fieldnames
+    fmap = csv_field_map(header)
+    missing = [k for k in ('po', 'delivery', 'title') if k not in fmap]
+    if missing:
+        faltan = ' / '.join('"%s"' % CSV_ALIASES[k][0] for k in missing)
+        return jsonify({
+            'error': f'El archivo no parece un reporte de Amazon Business: faltan las '
+                     f'columnas {faltan} (ni su equivalente en inglés).'
+        }), 400
+
     # ── Validación de cuenta: el CSV tiene que ser de la cuenta de Amazon Business
     #    configurada para la empresa activa. Evita cargar archivos de Zero en Lime.
     allowed = get_account_emails(company)
     if allowed:
         found = csv_account_emails(text)
+        col = ' / '.join(f'"{n}"' for n in CSV_ALIASES['account_email'])
         if found is None:
             return jsonify({
-                'error': f'El archivo no tiene la columna "{CSV_ACCOUNT_EMAIL_COL}", '
+                'error': f'El archivo no tiene la columna {col}, '
                          f'no se puede validar a qué cuenta pertenece.'
             }), 400
         if not found:
             return jsonify({
-                'error': f'El archivo no tiene ningún correo en "{CSV_ACCOUNT_EMAIL_COL}".'
+                'error': f'El archivo no tiene ningún correo en {col}.'
             }), 400
         invalid = sorted(found - set(allowed))
         if invalid:
@@ -1272,7 +1330,11 @@ def upload_csv():
     items = parse_csv(text, company)
 
     if not items:
-        return jsonify({'error': 'No items found with "Estado de entrega" = Entregado'}), 400
+        entregado = 'Delivered' if csv_lang(fmap) == 'en' else 'Entregado'
+        return jsonify({
+            'error': f'No se encontró ningún ítem con "{CSV_ALIASES["delivery"][0] if csv_lang(fmap)=="es" else "Delivery Status"}" '
+                     f'= {entregado} y un PO aceptado ({", ".join(get_accepted_pos(company))}).'
+        }), 400
 
     # Save to DB, skip duplicates
     po_type_map = get_po_types(company)   # PO -> tipo (comercial/personal/especial/revisar)
