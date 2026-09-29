@@ -275,6 +275,7 @@
             <option value="comercial">🏢 Comercial</option>
             <option value="personal">👤 Personal</option>
             <option value="especial">⭐ Especial</option>
+            <option value="almacen">🏬 Almacén</option>
             <option value="revisar">🔎 Revisar</option>
         </select>
         <div class="flex gap-3">
@@ -308,6 +309,7 @@
             <option value="comercial">🏢 Comercial</option>
             <option value="personal">👤 Personal</option>
             <option value="especial">⭐ Especial</option>
+            <option value="almacen">🏬 Almacén</option>
             <option value="revisar">🔎 Revisar</option>
         </select>
         <div class="flex gap-3">
@@ -388,6 +390,7 @@
                     <option value="comercial">🏢 Comercial</option>
                     <option value="personal">👤 Personal</option>
                     <option value="especial">⭐ Especial</option>
+                    <option value="almacen">🏬 Almacén</option>
                     <option value="revisar">🔎 Revisar</option>
                 </select>
             </div>
@@ -1086,6 +1089,7 @@ function renderItems() {
                     <option value="comercial" ${(item.item_type||'comercial')==='comercial'?'selected':''}>🏢 Comercial</option>
                     <option value="personal" ${item.item_type==='personal'?'selected':''}>👤 Personal</option>
                     <option value="especial" ${item.item_type==='especial'?'selected':''}>⭐ Especial</option>
+                    <option value="almacen" ${item.item_type==='almacen'?'selected':''}>🏬 Almacén</option>
                     <option value="revisar" ${item.item_type==='revisar'?'selected':''}>🔎 Revisar</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
@@ -1108,7 +1112,13 @@ function boxType() {
     for (const { item } of boxItems.values()) return item.item_type || 'comercial';
     return null;
 }
-function typeLabel(t) { return t === 'personal' ? 'PERSONAL' : 'COMERCIAL'; }
+function typeIcon(t) {
+    return {comercial:'🏢', personal:'👤', especial:'⭐', almacen:'🏬', revisar:'🔎'}[t] || '🏢';
+}
+function typeLabel(t) {
+    return {comercial:'COMERCIAL', personal:'PERSONAL', especial:'ESPECIAL',
+            almacen:'ALMACÉN', revisar:'REVISAR'}[t] || 'COMERCIAL';
+}
 
 function addToBox(itemId) {
     if (boxItems.has(itemId)) return;
@@ -1119,9 +1129,10 @@ function addToBox(itemId) {
     if (bt && bt !== itType) {
         confirmDialog({
             title: `Envío ${typeLabel(bt)}`,
-            message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar ítems personales y comerciales en el mismo envío. Vaciá la caja antes de agregar ítems ${typeLabel(itType)}.`,
+            message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar tipos distintos en el mismo envío. Vaciá la caja antes de agregar ítems ${typeLabel(itType)}.`,
             confirmText: 'Entendido',
-            cancelText: ''
+            cancelText: '',
+            icon: typeIcon(bt)
         });
         return;
     }
@@ -1508,7 +1519,7 @@ async function changeItemType(itemId, newType) {
         if (res.ok) {
             const it = allItems.find(i => i.id === itemId);
             if (it) it.item_type = newType;
-            toast({comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', revisar:'🔎 Revisar'}[newType] || newType, 'success');
+            toast({comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'}[newType] || newType, 'success');
         } else {
             toast(data.error || 'Error al cambiar tipo', 'error');
             loadItems();

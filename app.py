@@ -63,6 +63,8 @@ CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 
 # ─── Company ────────────────────────────────────────────────────────────────
 VALID_COMPANIES = ('zero', 'lime')
+# Tipos de ítem, en el orden en que se muestran en la UI
+ITEM_TYPES = ('comercial', 'personal', 'especial', 'almacen', 'revisar')
 COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
 # Etiquetas cortas, iguales a las del switch de empresa en la UI
 COMPANY_UI_NAMES = {'zero': 'Zero', 'lime': 'Limesquare'}
@@ -244,12 +246,12 @@ def csv_account_emails(text):
     return found
 
 def get_po_types(company=None):
-    """Mapping PO -> item type (comercial/personal/especial/revisar) for CSV imports."""
+    """Mapping PO -> item type (ver ITEM_TYPES) for CSV imports."""
     raw = company_cfg(company).get('po_types', {}) or {}
     out = {}
     for po, t in raw.items():
         t = str(t).strip().lower()
-        if t in ('comercial', 'personal', 'especial', 'revisar'):
+        if t in ITEM_TYPES:
             out[str(po).strip()] = t
     return out
 
@@ -1358,7 +1360,7 @@ def upload_csv():
         }), 400
 
     # Save to DB, skip duplicates
-    po_type_map = get_po_types(company)   # PO -> tipo (comercial/personal/especial/revisar)
+    po_type_map = get_po_types(company)   # PO -> tipo de ítem (ver ITEM_TYPES)
     conn = get_db()
     saved = 0
     skipped = 0
@@ -2191,7 +2193,7 @@ def update_item_fields(item_id):
         sets.append('qty = ?'); params.append(qty); new_qty = qty
     if 'item_type' in data:
         it = str(data.get('item_type', '')).strip().lower()
-        if it not in ('comercial', 'personal', 'especial', 'revisar'):
+        if it not in ITEM_TYPES:
             conn.close(); return jsonify({'error': 'Tipo inválido'}), 400
         sets.append('item_type = ?'); params.append(it)
     if not sets:
@@ -2211,7 +2213,7 @@ def update_item_type(item_id):
     """Change an item's type (comercial/personal)."""
     data = request.json or {}
     new_type = str(data.get('item_type', '')).strip().lower()
-    if new_type not in ('comercial', 'personal', 'especial', 'revisar'):
+    if new_type not in ITEM_TYPES:
         return jsonify({'error': 'Tipo inválido'}), 400
     conn = get_db()
     if conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
@@ -2260,7 +2262,7 @@ def add_manual_item():
         return jsonify({'error': 'El costo no puede ser negativo'}), 400
     company = get_company()
     item_type = str(data.get('item_type', 'comercial')).strip().lower()
-    if item_type not in ('comercial', 'personal', 'especial', 'revisar'):
+    if item_type not in ITEM_TYPES:
         item_type = 'comercial'
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
@@ -2363,7 +2365,7 @@ def set_po_config():
         for po, t in data['types'].items():
             po = str(po).strip()
             t = str(t).strip().lower()
-            if po in pos and t in ('comercial', 'personal', 'especial', 'revisar'):
+            if po in pos and t in ITEM_TYPES:
                 types[po] = t
         full['companies'][company]['po_types'] = types
     save_config(full)

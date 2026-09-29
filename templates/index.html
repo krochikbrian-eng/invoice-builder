@@ -241,6 +241,7 @@
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
                             <option value="especial">⭐ Especial</option>
+                            <option value="almacen">🏬 Almacén</option>
                             <option value="revisar">🔎 Revisar</option>
                         </select>
                     </div>
@@ -287,6 +288,7 @@
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
                             <option value="especial">⭐ Especial</option>
+                            <option value="almacen">🏬 Almacén</option>
                             <option value="revisar">🔎 Revisar</option>
                         </select>
                     </div>
@@ -419,6 +421,7 @@
                             <option value="comercial">🏢 Comercial</option>
                             <option value="personal">👤 Personal</option>
                             <option value="especial">⭐ Especial</option>
+                            <option value="almacen">🏬 Almacén</option>
                             <option value="revisar">🔎 Revisar</option>
                         </select>
                         <select id="sort-items" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
@@ -717,6 +720,7 @@
                     <option value="comercial" ${t==='comercial'?'selected':''}>🏢 Comercial</option>
                     <option value="personal" ${t==='personal'?'selected':''}>👤 Personal</option>
                     <option value="especial" ${t==='especial'?'selected':''}>⭐ Especial</option>
+                    <option value="almacen" ${t==='almacen'?'selected':''}>🏬 Almacén</option>
                     <option value="revisar" ${t==='revisar'?'selected':''}>🔎 Revisar</option>
                 </select>
                 <button onclick="removePO('${escAttr(po)}')" class="text-blue-400/60 hover:text-red-400 transition-colors">&times;</button>
@@ -733,7 +737,7 @@
         types[po] = type;
         localStorage.setItem('poTypes', JSON.stringify(types));
         saveAcceptedPOs(getAcceptedPOs());
-        const labels = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', revisar:'🔎 Revisar'};
+        const labels = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'};
         toast(`PO ${po} → ${labels[type] || type}`, 'success');
     }
     function addPO() {
@@ -1289,6 +1293,7 @@
                                 <option value="comercial" ${(item.item_type || 'comercial') === 'comercial' ? 'selected' : ''}>🏢 Comercial</option>
                                 <option value="personal" ${item.item_type === 'personal' ? 'selected' : ''}>👤 Personal</option>
                                 <option value="especial" ${item.item_type === 'especial' ? 'selected' : ''}>⭐ Especial</option>
+                                <option value="almacen" ${item.item_type === 'almacen' ? 'selected' : ''}>🏬 Almacén</option>
                                 <option value="revisar" ${item.item_type === 'revisar' ? 'selected' : ''}>🔎 Revisar</option>
                             </select>
                             ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
@@ -1418,7 +1423,7 @@
         if (skippedType > 0) {
             confirmDialog({
                 title: `Envío ${typeLabel(targetType)}`,
-                message: `Este envío es ${typeLabel(targetType)}.\n\n${skippedType} ítem(s) del otro tipo no se agregaron. No se pueden mezclar ítems personales y comerciales en el mismo envío.${added ? `\n\nSe agregaron ${added} ítem(s) ${typeLabel(targetType)}.` : ''}`,
+                message: `Este envío es ${typeLabel(targetType)}.\n\n${skippedType} ítem(s) del otro tipo no se agregaron. No se pueden mezclar tipos distintos en el mismo envío.${added ? `\n\nSe agregaron ${added} ítem(s) ${typeLabel(targetType)}.` : ''}`,
                 confirmText: 'Entendido',
                 cancelText: '',
                 icon: targetType === 'personal' ? '👤' : '🏢'
@@ -1567,7 +1572,13 @@
         for (const { item } of boxItems.values()) return item.item_type || 'comercial';
         return null;
     }
-    function typeLabel(t) { return t === 'personal' ? 'PERSONAL' : 'COMERCIAL'; }
+    function typeIcon(t) {
+        return {comercial:'🏢', personal:'👤', especial:'⭐', almacen:'🏬', revisar:'🔎'}[t] || '🏢';
+    }
+    function typeLabel(t) {
+        return {comercial:'COMERCIAL', personal:'PERSONAL', especial:'ESPECIAL',
+                almacen:'ALMACÉN', revisar:'REVISAR'}[t] || 'COMERCIAL';
+    }
 
     function addToBox(itemId) {
         if (boxItems.has(itemId)) return;
@@ -1578,10 +1589,10 @@
         if (bt && bt !== itType) {
             confirmDialog({
                 title: `Envío ${typeLabel(bt)}`,
-                message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar ítems personales y comerciales en el mismo envío. Vaciá la caja (o generá el invoice) antes de agregar ítems ${typeLabel(itType)}.`,
+                message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar tipos distintos en el mismo envío. Vaciá la caja (o generá el invoice) antes de agregar ítems ${typeLabel(itType)}.`,
                 confirmText: 'Entendido',
                 cancelText: '',
-                icon: bt === 'personal' ? '👤' : '🏢'
+                icon: typeIcon(bt)
             });
             return;
         }
@@ -2110,7 +2121,7 @@
             if (res.ok) {
                 const it = allItems.find(i => i.id === itemId);
                 if (it) it.item_type = newType;
-                const _tl = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', revisar:'🔎 Revisar'}[newType] || newType;
+                const _tl = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'}[newType] || newType;
                 toast('Tipo: ' + _tl, 'success');
             } else {
                 toast(data.error || 'Error al cambiar tipo', 'error');
