@@ -524,6 +524,12 @@ def init_db():
         conn.commit()
     except Exception:
         pass  # Column already exists
+    # Migration: peso unitario del producto en kg. Opcional: NULL = sin cargar.
+    try:
+        conn.execute("ALTER TABLE items ADD COLUMN weight REAL")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
@@ -570,6 +576,23 @@ def clean_csv_value(val):
     elif val.endswith('"'):
         val = val[:-1]
     return val.strip()
+
+def parse_weight(val):
+    """Peso unitario en kg. Es opcional: vacío/None devuelve None (sin cargar)."""
+    if val is None:
+        return None
+    s = str(val).strip().replace(',', '.')
+    if s == '':
+        return None
+    try:
+        w = float(s)
+    except ValueError:
+        raise ValueError('Peso inválido')
+    if w < 0:
+        raise ValueError('El peso no puede ser negativo')
+    if w > 100000:
+        raise ValueError('Peso fuera de rango')
+    return round(w, 3)
 
 def parse_price(val):
     """Parse price string to float."""
@@ -1432,6 +1455,7 @@ def get_items():
             'invoice_number': row['invoice_number'],
             'multi_item': order_counts.get(row['order_id'], 0) > 1,
             'item_type': (row['item_type'] if 'item_type' in row.keys() else 'comercial') or 'comercial',
+            'weight': (row['weight'] if 'weight' in row.keys() else None),
         })
 
     conn.close()
@@ -2196,6 +2220,12 @@ def update_item_fields(item_id):
         if it not in ITEM_TYPES:
             conn.close(); return jsonify({'error': 'Tipo inválido'}), 400
         sets.append('item_type = ?'); params.append(it)
+    if 'weight' in data:
+        try:
+            w = parse_weight(data.get('weight'))
+        except ValueError as e:
+            conn.close(); return jsonify({'error': str(e)}), 400
+        sets.append('weight = ?'); params.append(w)
     if not sets:
         conn.close()
         return jsonify({'error': 'Nada para actualizar'}), 400
@@ -2264,13 +2294,17 @@ def add_manual_item():
     item_type = str(data.get('item_type', 'comercial')).strip().lower()
     if item_type not in ITEM_TYPES:
         item_type = 'comercial'
+    try:
+        weight = parse_weight(data.get('weight'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
     conn = get_db()
     cur = conn.execute("""
-        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company, item_type)
-        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?, ?)
-    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company, item_type))
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company, item_type, weight)
+        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?, ?, ?)
+    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company, item_type, weight))
     conn.commit()
     new_id = cur.lastrowid
     conn.close()

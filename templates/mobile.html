@@ -270,6 +270,8 @@
         </div>
         <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
         <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="TBA...">
+        <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
+        <input id="mi-weight" type="number" inputmode="decimal" min="0" step="0.01" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
         <select id="mi-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
@@ -304,6 +306,8 @@
         </div>
         <label class="text-xs text-gray-400 block mb-1">Tracking</label>
         <input id="ei-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="Tracking">
+        <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
+        <input id="ei-weight" type="number" inputmode="decimal" min="0" step="0.01" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
         <select id="ei-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
@@ -567,6 +571,7 @@ function openManualItemModal() {
     document.getElementById('mi-price').value = '';
     document.getElementById('mi-tracking').value = '';
     document.getElementById('mi-type').value = 'comercial';
+    document.getElementById('mi-weight').value = '';
     document.getElementById('manual-item-modal').classList.add('open');
     setTimeout(() => document.getElementById('mi-title').focus(), 50);
 }
@@ -585,12 +590,21 @@ function openEditItemModal(itemId) {
     document.getElementById('ei-qty').value = item.qty;
     document.getElementById('ei-price').value = item.price;
     document.getElementById('ei-type').value = item.item_type || 'comercial';
+    document.getElementById('ei-weight').value = item.weight != null ? item.weight : '';
     document.getElementById('edit-item-modal').classList.add('open');
     setTimeout(() => document.getElementById('ei-title').focus(), 50);
 }
 
 function closeEditItemModal() {
     document.getElementById('edit-item-modal').classList.remove('open');
+}
+
+// Lee un input de peso opcional. Devuelve null si está vacío, o false si es inválido.
+function readWeightInput(elId) {
+    const txt = String(document.getElementById(elId).value || '').trim().replace(',', '.');
+    if (txt === '') return null;
+    const w = Number(txt);
+    return (isFinite(w) && w >= 0) ? w : false;
 }
 
 async function submitEditItem() {
@@ -600,6 +614,8 @@ async function submitEditItem() {
     const qty = parseInt(document.getElementById('ei-qty').value);
     const price = parseFloat(document.getElementById('ei-price').value);
     const item_type = document.getElementById('ei-type').value;
+    const weight = readWeightInput('ei-weight');
+    if (weight === false) { toast('Peso inválido', 'error'); return; }
     if (!title) { toast('El título no puede estar vacío', 'error'); return; }
     if (!qty || qty <= 0) { toast('Cantidad inválida', 'error'); return; }
     if (isNaN(price) || price < 0) { toast('Precio inválido', 'error'); return; }
@@ -609,14 +625,14 @@ async function submitEditItem() {
         const res = await fetch(`/api/items/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, tracking, qty, price, item_type })
+            body: JSON.stringify({ title, tracking, qty, price, item_type, weight })
         });
         const data = await res.json();
         if (res.ok) {
             toast('Ítem actualizado', 'success');
             closeEditItemModal();
             const boxEntry = boxItems.get(id);
-            if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; boxEntry.item.price = price; boxEntry.item.item_type = item_type; boxEntry.qty = qty; boxEntry.item.qty = qty; if (typeof renderBox === 'function') renderBox(); if (typeof updateBoxBadge === 'function') updateBoxBadge(); }
+            if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; boxEntry.item.price = price; boxEntry.item.item_type = item_type; boxEntry.item.weight = weight; boxEntry.qty = qty; boxEntry.item.qty = qty; if (typeof renderBox === 'function') renderBox(); if (typeof updateBoxBadge === 'function') updateBoxBadge(); }
             loadItems();
         } else {
             toast(data.error || 'Error al guardar', 'error');
@@ -634,6 +650,8 @@ async function submitManualItem() {
     const price = parseFloat(document.getElementById('mi-price').value);
     const tracking = document.getElementById('mi-tracking').value.trim();
     const item_type = document.getElementById('mi-type').value;
+    const weight = readWeightInput('mi-weight');
+    if (weight === false) { toast('Peso inválido', 'error'); return; }
     if (!title) { toast('Ingresá un título', 'error'); return; }
     if (!qty || qty <= 0) { toast('Cantidad inválida', 'error'); return; }
     if (isNaN(price) || price < 0) { toast('Costo inválido', 'error'); return; }
@@ -643,7 +661,7 @@ async function submitManualItem() {
         const res = await fetch('/api/items/manual', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, qty, price, tracking, item_type })
+            body: JSON.stringify({ title, qty, price, tracking, item_type, weight })
         });
         const data = await res.json();
         if (res.ok) {
@@ -1073,6 +1091,7 @@ function renderItems() {
             <div class="item-meta flex flex-wrap gap-x-4 gap-y-1">
                 <span>💲 <span>$${item.price.toFixed(2)} × ${item.qty}</span></span>
                 <span>📅 <span>${item.order_date || '—'}</span></span>
+                ${item.weight != null ? `<span>⚖️ <span>${Number(item.weight)} kg</span></span>` : ''}
                 ${item.asin ? `<span style="cursor:pointer;" onclick="copyTracking('${item.asin.replace(/'/g, "\\'")}')">ASIN: <span style="color:#89b4fa; font-family:monospace;">${item.asin}</span></span>` : ''}
                 ${item.tracking ? `<span style="cursor:pointer;" onclick="copyTracking('${item.tracking.replace(/'/g, "\\'")}')">📦 <span style="font-family:monospace; font-size:0.68rem;">${item.tracking.substring(0,22)}${item.tracking.length>22?'…':''}</span></span>` : ''}
                 ${item.multi_item ? '<span class="badge" style="background:rgba(203,166,247,0.2);color:#cba6f7;">Multi</span>' : ''}

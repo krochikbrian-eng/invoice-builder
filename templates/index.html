@@ -236,6 +236,13 @@
                                onkeydown="if(event.key==='Enter')submitManualItem()">
                     </div>
                     <div>
+                        <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
+                        <input id="mi-weight" type="number" min="0" step="0.01" class="field w-full px-3 py-2 text-sm" placeholder="—"
+                               onkeydown="if(event.key==='Enter')submitManualItem()">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
                         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
                         <select id="mi-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
                             <option value="comercial">🏢 Comercial</option>
@@ -282,6 +289,13 @@
                         <input id="ei-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="Tracking"
                                onkeydown="if(event.key==='Enter')submitEditItem()">
                     </div>
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
+                        <input id="ei-weight" type="number" min="0" step="0.01" class="field w-full px-3 py-2 text-sm" placeholder="—"
+                               onkeydown="if(event.key==='Enter')submitEditItem()">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
                         <select id="ei-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
@@ -482,6 +496,10 @@
                             <div class="flex justify-between items-center text-sm text-gray-400 mt-1">
                                 <span id="box-count">0 ítems</span>
                                 <span id="next-invoice">Próximo: #<span id="next-inv-num">—</span></span>
+                            </div>
+                            <div id="box-weight-row" class="flex justify-between items-center text-sm text-gray-400 mt-1 hidden">
+                                <span>Peso total:</span>
+                                <span id="box-weight" class="tabular-nums">— kg</span>
                             </div>
                             <div class="flex flex-col sm:flex-row gap-3 mt-4">
                                 <button onclick="generateInvoice()" id="generate-btn"
@@ -1249,7 +1267,7 @@
                         <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">${fmtMoney(total)}</span>
                     </div>
                     <!-- Row 2: Metadata grid -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2.5 text-xs">
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-1 mt-2.5 text-xs">
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Precio</span>
                             <p class="text-gray-300 font-medium flex items-center gap-1">
@@ -1276,6 +1294,17 @@
                                 <a href="https://www.amazon.com/dp/${encodeURIComponent(item.asin)}" target="_blank" rel="noopener" title="Ver en Amazon" class="text-gray-500 hover:text-orange-300 transition-colors" onclick="event.stopPropagation()">
                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
                                 </a>` : '—'}
+                            </p>
+                        </div>
+                        <div>
+                            <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Peso (kg)</span>
+                            <p class="text-gray-300 font-medium">
+                                <input type="number" min="0" step="0.01" placeholder="—"
+                                       value="${item.weight != null ? item.weight : ''}"
+                                       title="Peso unitario en kg (opcional)"
+                                       onclick="event.stopPropagation()"
+                                       onchange="event.stopPropagation(); changeItemWeight(${item.id}, this.value, this)"
+                                       class="field text-xs text-center px-1 py-0.5" style="width:4.5rem;">
                             </p>
                         </div>
                     </div>
@@ -1440,8 +1469,17 @@
     }
 
     // ─── Manual item ────────────────────────────────────────────────────
+    // Lee un input de peso opcional. Devuelve null si está vacío, o false si es inválido.
+    function readWeightInput(elId) {
+        const txt = String(document.getElementById(elId).value || '').trim().replace(',', '.');
+        if (txt === '') return null;
+        const w = Number(txt);
+        return (isFinite(w) && w >= 0) ? w : false;
+    }
+
     function openManualItemModal() {
         document.getElementById('mi-title').value = '';
+        document.getElementById('mi-weight').value = '';
         document.getElementById('mi-qty').value = '1';
         document.getElementById('mi-price').value = '';
         document.getElementById('mi-tracking').value = '';
@@ -1468,6 +1506,7 @@
         document.getElementById('ei-qty').value = item.qty;
         document.getElementById('ei-price').value = item.price;
         document.getElementById('ei-type').value = item.item_type || 'comercial';
+        document.getElementById('ei-weight').value = item.weight != null ? item.weight : '';
         const modal = document.getElementById('edit-item-modal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1487,6 +1526,8 @@
         const qty = parseInt(document.getElementById('ei-qty').value);
         const price = parseFloat(document.getElementById('ei-price').value);
         const item_type = document.getElementById('ei-type').value;
+        const weight = readWeightInput('ei-weight');
+        if (weight === false) { toast('Peso inválido', 'warning'); return; }
         if (!title) { toast('El título no puede estar vacío', 'warning'); return; }
         if (!qty || qty <= 0) { toast('Cantidad inválida', 'warning'); return; }
         if (isNaN(price) || price < 0) { toast('Precio inválido', 'warning'); return; }
@@ -1496,7 +1537,7 @@
             const res = await fetch(`/api/items/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, tracking, qty, price, item_type })
+                body: JSON.stringify({ title, tracking, qty, price, item_type, weight })
             });
             const data = await res.json();
             if (res.ok) {
@@ -1504,7 +1545,7 @@
                 closeEditItemModal();
                 // reflect in box if present
                 const boxEntry = boxItems.get(id);
-                if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; boxEntry.item.price = price; boxEntry.item.item_type = item_type; boxEntry.qty = qty; boxEntry.item.qty = qty; renderBox(); }
+                if (boxEntry) { boxEntry.item.title = title; boxEntry.item.tracking = tracking; boxEntry.item.price = price; boxEntry.item.item_type = item_type; boxEntry.item.weight = weight; boxEntry.qty = qty; boxEntry.item.qty = qty; renderBox(); }
                 loadItems();
             } else {
                 toast(data.error || 'Error al guardar', 'error');
@@ -1522,6 +1563,8 @@
         const price = parseFloat(document.getElementById('mi-price').value);
         const tracking = document.getElementById('mi-tracking').value.trim();
         const item_type = document.getElementById('mi-type').value;
+        const weight = readWeightInput('mi-weight');
+        if (weight === false) { toast('Peso inválido', 'warning'); return; }
         if (!title) { toast('Ingresá un título', 'warning'); return; }
         if (!qty || qty <= 0) { toast('Cantidad inválida', 'warning'); return; }
         if (isNaN(price) || price < 0) { toast('Costo inválido', 'warning'); return; }
@@ -1531,7 +1574,7 @@
             const res = await fetch('/api/items/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, qty, price, tracking, item_type })
+                body: JSON.stringify({ title, qty, price, tracking, item_type, weight })
             });
             const data = await res.json();
             if (res.ok) {
@@ -1631,6 +1674,7 @@
             box.innerHTML = '<p class="text-gray-500 text-center py-8 empty-msg">Arrastrá ítems acá para armar un invoice</p>';
             document.getElementById('box-total').textContent = '$0.00';
             document.getElementById('box-count').textContent = '0 ítems';
+            document.getElementById('box-weight-row').classList.add('hidden');
             breakdown.classList.add('hidden');
             genBtn.disabled = true;
             remitoBtn.disabled = true;
@@ -1668,6 +1712,7 @@
         box.innerHTML = html.join('');
         document.getElementById('box-total').textContent = fmtMoney(total);
         document.getElementById('box-count').textContent = `${boxItems.size} ítems`;
+        renderBoxWeight();
         if (discount > 0) {
             breakdown.classList.remove('hidden');
             document.getElementById('box-subtotal').textContent = fmtMoney(subtotal);
@@ -1679,6 +1724,23 @@
         genBtn.disabled = false;
         remitoBtn.disabled = false;
         initSortable();
+    }
+
+    // Peso total de la caja. Solo se muestra si al menos un ítem tiene peso cargado,
+    // y avisa cuántos quedan sin completar para que el número no engañe.
+    function renderBoxWeight() {
+        const row = document.getElementById('box-weight-row');
+        const out = document.getElementById('box-weight');
+        if (!row || !out) return;
+        let total = 0, conPeso = 0, sinPeso = 0;
+        for (const { item, qty } of boxItems.values()) {
+            if (item.weight != null && item.weight !== '') { total += Number(item.weight) * qty; conPeso++; }
+            else sinPeso++;
+        }
+        if (conPeso === 0) { row.classList.add('hidden'); return; }
+        row.classList.remove('hidden');
+        out.textContent = `${total.toFixed(2)} kg` + (sinPeso ? ` · ${sinPeso} sin peso` : '');
+        out.className = 'tabular-nums' + (sinPeso ? ' text-yellow-300' : '');
     }
 
     async function updateNextInvoice() {
@@ -2076,6 +2138,40 @@
     }
 
     // Editar la cantidad directamente desde la card
+    // Peso unitario en kg. Es opcional: vacío lo deja sin cargar.
+    async function changeItemWeight(itemId, rawWeight, el) {
+        const item = allItems.find(i => i.id === itemId);
+        const prev = item && item.weight != null ? item.weight : '';
+        const txt = String(rawWeight).trim();
+        const weight = txt === '' ? null : Number(txt.replace(',', '.'));
+        if (weight !== null && (!isFinite(weight) || weight < 0)) {
+            toast('Peso inválido', 'warning');
+            if (el) el.value = prev;
+            return;
+        }
+        if ((weight === null ? '' : weight) === prev) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ weight })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                if (item) item.weight = weight;
+                const boxEntry = boxItems.get(itemId);
+                if (boxEntry) { boxEntry.item.weight = weight; renderBox(); }
+                toast(weight === null ? 'Peso borrado' : `Peso: ${weight} kg`, 'success');
+            } else {
+                toast(data.error || 'Error al guardar el peso', 'error');
+                if (el) el.value = prev;
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+            if (el) el.value = prev;
+        }
+    }
+
     async function changeItemQty(itemId, rawQty, el) {
         const item = allItems.find(i => i.id === itemId);
         const prev = item ? item.qty : 1;
