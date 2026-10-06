@@ -241,7 +241,7 @@
                             <input id="mi-tracking" type="text" class="field flex-1 min-w-0 px-3 py-2 text-sm" placeholder="TBA... / MAIL..."
                                    onblur="lookupTracking()"
                                    onkeydown="if(event.key==='Enter'){event.preventDefault();lookupTracking();}">
-                            <button type="button" id="mi-lookup-btn" onclick="lookupTracking(true)"
+                            <button type="button" id="mi-lookup-btn" onmousedown="event.preventDefault()" onclick="lookupTracking(true)"
                                     class="btn-ghost px-3 py-2 rounded-md text-sm shrink-0" title="Buscar los datos del producto por tracking">🔍</button>
                         </div>
                     </div>
@@ -1536,6 +1536,7 @@
     // Al cargar un ítem manual, si el tracking existe en envíos/devoluciones/almacén
     // traemos título, costo, cantidad, peso y ASIN para no tipearlos a mano.
     let miLookup = { tracking: '', results: [], asin: '' };
+    let lookupSeq = 0;
 
     function miLookupBox(html, cls) {
         const box = document.getElementById('mi-lookup');
@@ -1552,11 +1553,13 @@
         const tracking = input.value.trim();
         if (!tracking) { miLookup = { tracking: '', results: [], asin: '' }; miLookupBox(''); return; }
         if (!force && tracking === miLookup.tracking) return;   // ya lo buscamos
+        const token = ++lookupSeq;   // descartamos respuestas de búsquedas viejas
         miLookup = { tracking, results: [], asin: '' };
         miLookupBox('Buscando datos del producto…');
         try {
             const res = await fetch(`/api/tracking-lookup?tracking=${encodeURIComponent(tracking)}`);
             const data = await res.json().catch(() => ({}));
+            if (token !== lookupSeq) return;
             if (!res.ok) { miLookupBox(escHtml(data.error || 'No se pudo consultar la API'), 'error'); return; }
             if (!data.found || !data.results.length) {
                 miLookupBox('Sin datos para ese tracking — completá los campos a mano');
@@ -1565,6 +1568,7 @@
             miLookup.results = data.results;
             applyLookupResult(0, false);
         } catch (err) {
+            if (token !== lookupSeq) return;
             miLookupBox('Error al consultar: ' + escHtml(err.message), 'error');
         }
     }
@@ -1595,8 +1599,8 @@
                     <div class="truncate" style="color:#cdd6f4;">${escHtml(r.title || '(sin título)')}</div>
                     <div style="color:#9399b2;">
                         ${r.price != null ? '$' + Number(r.price).toFixed(2) : 'sin precio'}
-                        · ${r.qty} u
-                        · ${r.weight != null ? r.weight + ' kg' : 'sin peso'}
+                        · ${escHtml(r.qty)} u
+                        · ${r.weight != null ? escHtml(r.weight) + ' kg' : 'sin peso'}
                         ${r.asin ? '· ' + escHtml(r.asin) : ''}
                         · ${escHtml(r.tipo)}${r.estado ? ' (' + escHtml(r.estado) + ')' : ''}
                     </div>
@@ -1709,7 +1713,7 @@
             const res = await fetch('/api/items/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin: miLookup.asin || '' })
+                body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin: (miLookup.tracking === tracking ? (miLookup.asin || '') : '') })
             });
             const data = await res.json();
             if (res.ok) {

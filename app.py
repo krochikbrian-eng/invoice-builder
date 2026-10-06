@@ -592,20 +592,33 @@ def get_tracking_api_key():
             or load_config().get('tracking_api_key', '') or '').strip()
 
 def parse_peso_kg(val):
-    """La API devuelve el peso como texto ("0.45 kg", "1,15 kg"). Lo pasa a float."""
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        return parse_weight(val)
-    m = re.search(r'-?\d+(?:[.,]\d+)?', str(val))
-    if not m:
+    """La API devuelve el peso como texto ("0.45 kg", "1,15 kg"). Lo pasa a float en kg.
+
+    Contempla gramos y libras por si alguna fila viene con otra unidad, y nunca
+    lanza: si no se puede interpretar devuelve None.
+    """
+    if val is None or isinstance(val, bool):
         return None
     try:
-        return parse_weight(m.group(0))
-    except ValueError:
+        if isinstance(val, (int, float)):
+            return parse_weight(val)
+        txt = str(val).strip().lower()
+        m = re.search(r'-?\d+(?:[.,]\d+)?', txt)
+        if not m:
+            return None
+        kg = parse_weight(m.group(0))
+        if kg is None:
+            return None
+        unidad = txt[m.end():].strip()
+        if unidad.startswith('lb') or unidad.startswith('lib'):
+            kg = round(kg * 0.45359237, 3)
+        elif unidad.startswith('g') and not unidad.startswith('kg'):
+            kg = round(kg / 1000, 3)
+        return kg
+    except (ValueError, TypeError):
         return None
 
-def _tracking_lookup_call(tracking, api_key, timeout=12):
+def _tracking_lookup_call(tracking, api_key, timeout=6):
     """Una llamada a la API. Devuelve (status_code, dict) o lanza URLError."""
     body = _json.dumps({'tracking': tracking}).encode()
     req = urllib.request.Request(
@@ -2373,9 +2386,10 @@ def tracking_lookup():
                                  '(Configuración → Búsqueda por tracking).',
                         'not_configured': True}), 503
 
-    # La API dice ser case-insensitive pero en la práctica no lo es:
-    # probamos tal cual, en mayúsculas y en minúsculas antes de darnos por vencidos.
-    candidates = list(dict.fromkeys([tracking, tracking.upper(), tracking.lower()]))
+    # La API dice ser case-insensitive pero en la práctica no lo es: los trackings
+    # están guardados en mayúsculas, así que probamos tal cual y después en mayúsculas.
+    # Como mucho 2 llamadas, para no colgar el worker.
+    candidates = list(dict.fromkeys([tracking, tracking.upper()]))
     data, status = {}, 0
     for cand in candidates:
         try:
@@ -2383,7 +2397,9 @@ def tracking_lookup():
         except Exception as e:
             app.logger.warning('tracking-lookup falló para %s: %s', cand, e)
             return jsonify({'error': 'No se pudo consultar la API de tracking'}), 502
-        if status == 401 or status == 403:
+        if not isinstance(data, dict):
+            data = {}
+        if status in (401, 403):
             return jsonify({'error': 'La API rechazó la clave (no autorizado)'}), 502
         if data.get('success') and data.get('results'):
             break
@@ -2394,6 +2410,8 @@ def tracking_lookup():
 
     results = []
     for r in data.get('results') or []:
+        if not isinstance(r, dict):
+            continue
         precio = r.get('precio_costo')
         if precio in (None, ''):
             precio = r.get('precio_proveedor_actual')
