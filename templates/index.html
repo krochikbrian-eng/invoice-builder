@@ -33,9 +33,10 @@
         }
     </script>
     <style>
-        /* Metadata de la tarjeta: la columna de peso es angosta para no apretar Precio/Tracking */
+        /* Metadata de la tarjeta: la columna de peso es angosta para no apretar Precio/Tracking.
+           Va con !important porque el <style> de Tailwind (CDN) se inyecta después de este. */
         @media (min-width: 640px) {
-            .item-meta-grid { grid-template-columns: 1.35fr 1.25fr 0.9fr 1fr 0.75fr; }
+            .item-meta-grid { grid-template-columns: 1.35fr 1.25fr 0.9fr 1fr 0.75fr !important; }
         }
         :root {
             --bg: #0d0d15;
