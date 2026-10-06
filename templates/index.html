@@ -33,6 +33,10 @@
         }
     </script>
     <style>
+        /* Metadata de la tarjeta: la columna de peso es angosta para no apretar Precio/Tracking */
+        @media (min-width: 640px) {
+            .item-meta-grid { grid-template-columns: 1.35fr 1.25fr 0.9fr 1fr 0.75fr; }
+        }
         :root {
             --bg: #0d0d15;
             --surface: #16161f;
@@ -237,7 +241,7 @@
                     </div>
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
-                        <input id="mi-weight" type="number" min="0" step="0.01" class="field w-full px-3 py-2 text-sm" placeholder="—"
+                        <input id="mi-weight" type="number" min="0" step="0.001" class="field w-full px-3 py-2 text-sm" placeholder="—"
                                onkeydown="if(event.key==='Enter')submitManualItem()">
                     </div>
                 </div>
@@ -291,7 +295,7 @@
                     </div>
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
-                        <input id="ei-weight" type="number" min="0" step="0.01" class="field w-full px-3 py-2 text-sm" placeholder="—"
+                        <input id="ei-weight" type="number" min="0" step="0.001" class="field w-full px-3 py-2 text-sm" placeholder="—"
                                onkeydown="if(event.key==='Enter')submitEditItem()">
                     </div>
                 </div>
@@ -1267,7 +1271,7 @@
                         <span class="text-xl font-bold text-green-400 shrink-0 tabular-nums">${fmtMoney(total)}</span>
                     </div>
                     <!-- Row 2: Metadata grid -->
-                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-1 mt-2.5 text-xs">
+                    <div class="grid grid-cols-2 item-meta-grid gap-x-3 gap-y-1 mt-2.5 text-xs">
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Precio</span>
                             <p class="text-gray-300 font-medium flex items-center gap-1">
@@ -1299,7 +1303,7 @@
                         <div>
                             <span class="text-gray-500 uppercase tracking-wider" style="font-size:0.6rem;">Peso (kg)</span>
                             <p class="text-gray-300 font-medium">
-                                <input type="number" min="0" step="0.01" placeholder="—"
+                                <input type="number" min="0" step="0.001" placeholder="—"
                                        value="${item.weight != null ? item.weight : ''}"
                                        title="Peso unitario en kg (opcional)"
                                        onclick="event.stopPropagation()"
@@ -1474,7 +1478,8 @@
         const txt = String(document.getElementById(elId).value || '').trim().replace(',', '.');
         if (txt === '') return null;
         const w = Number(txt);
-        return (isFinite(w) && w >= 0) ? w : false;
+        if (!isFinite(w) || w < 0) return false;
+        return Math.round(w * 1000) / 1000;
     }
 
     function openManualItemModal() {
@@ -1739,7 +1744,7 @@
         }
         if (conPeso === 0) { row.classList.add('hidden'); return; }
         row.classList.remove('hidden');
-        out.textContent = `${total.toFixed(2)} kg` + (sinPeso ? ` · ${sinPeso} sin peso` : '');
+        out.textContent = `${total.toFixed(2)} kg` + (sinPeso ? ` · ${sinPeso} ítem(s) sin peso` : '');
         out.className = 'tabular-nums' + (sinPeso ? ' text-yellow-300' : '');
     }
 
@@ -2137,18 +2142,18 @@
         setTimeout(() => card.classList.remove('just-saved'), 1500);
     }
 
-    // Editar la cantidad directamente desde la card
     // Peso unitario en kg. Es opcional: vacío lo deja sin cargar.
     async function changeItemWeight(itemId, rawWeight, el) {
         const item = allItems.find(i => i.id === itemId);
         const prev = item && item.weight != null ? item.weight : '';
         const txt = String(rawWeight).trim();
-        const weight = txt === '' ? null : Number(txt.replace(',', '.'));
+        let weight = txt === '' ? null : Number(txt.replace(',', '.'));
         if (weight !== null && (!isFinite(weight) || weight < 0)) {
             toast('Peso inválido', 'warning');
             if (el) el.value = prev;
             return;
         }
+        if (weight !== null) weight = Math.round(weight * 1000) / 1000;  // igual que el backend
         if ((weight === null ? '' : weight) === prev) return;
         try {
             const res = await fetch(`/api/items/${itemId}`, {
@@ -2161,7 +2166,9 @@
                 if (item) item.weight = weight;
                 const boxEntry = boxItems.get(itemId);
                 if (boxEntry) { boxEntry.item.weight = weight; renderBox(); }
+                if (el) el.value = weight === null ? '' : weight;
                 toast(weight === null ? 'Peso borrado' : `Peso: ${weight} kg`, 'success');
+                flashItemCard(itemId);
             } else {
                 toast(data.error || 'Error al guardar el peso', 'error');
                 if (el) el.value = prev;

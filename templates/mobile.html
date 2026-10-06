@@ -271,7 +271,7 @@
         <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
         <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="TBA...">
         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
-        <input id="mi-weight" type="number" inputmode="decimal" min="0" step="0.01" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
+        <input id="mi-weight" type="number" inputmode="decimal" min="0" step="0.001" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
         <select id="mi-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
@@ -307,7 +307,7 @@
         <label class="text-xs text-gray-400 block mb-1">Tracking</label>
         <input id="ei-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="Tracking">
         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
-        <input id="ei-weight" type="number" inputmode="decimal" min="0" step="0.01" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
+        <input id="ei-weight" type="number" inputmode="decimal" min="0" step="0.001" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
         <select id="ei-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
@@ -604,7 +604,8 @@ function readWeightInput(elId) {
     const txt = String(document.getElementById(elId).value || '').trim().replace(',', '.');
     if (txt === '') return null;
     const w = Number(txt);
-    return (isFinite(w) && w >= 0) ? w : false;
+    if (!isFinite(w) || w < 0) return false;
+    return Math.round(w * 1000) / 1000;
 }
 
 async function submitEditItem() {

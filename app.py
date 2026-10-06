@@ -3,6 +3,7 @@
 
 import os
 import io
+import math
 import csv
 import re
 import sqlite3
@@ -587,6 +588,8 @@ def parse_weight(val):
     try:
         w = float(s)
     except ValueError:
+        raise ValueError('Peso inválido')
+    if not math.isfinite(w):
         raise ValueError('Peso inválido')
     if w < 0:
         raise ValueError('El peso no puede ser negativo')
