@@ -269,7 +269,13 @@
             </div>
         </div>
         <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
-        <input id="mi-tracking" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="TBA...">
+        <div class="flex gap-2 mb-2">
+            <input id="mi-tracking" type="text" class="field flex-1 min-w-0 px-3 py-3 text-sm" placeholder="TBA... / MAIL..."
+                   onblur="lookupTracking()" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupTracking();}">
+            <button type="button" onclick="lookupTracking(true)" class="px-3 rounded-xl text-sm shrink-0"
+                    style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#cdd6f4;">🔍</button>
+        </div>
+        <div id="mi-lookup" class="hidden text-xs mb-3 rounded-lg px-3 py-2" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);"></div>
         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
         <input id="mi-weight" type="number" inputmode="decimal" min="0" step="0.001" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
@@ -450,6 +456,18 @@
                 </div>
             </div>
 
+            <!-- Búsqueda por tracking -->
+            <div class="card section-card">
+                <div class="section-title">🔍 Búsqueda por tracking</div>
+                <div class="section-desc">Al cargar un ítem manual, el tracking trae título, costo, cantidad y peso.</div>
+                <div class="flex gap-2">
+                    <input type="password" id="trk-key" placeholder="API key" style="flex:1;"
+                           onkeydown="if(event.key==='Enter')saveTrackingCfg()">
+                    <button onclick="saveTrackingCfg()" class="btn-primary px-4 rounded-xl text-sm" style="min-width:90px;">Guardar</button>
+                </div>
+                <p id="trk-status" class="text-xs mt-2" style="color:#585b70;"></p>
+            </div>
+
             <!-- Invoice Counter -->
             <div class="card section-card">
                 <div class="section-title">Contador de Invoice</div>
@@ -565,7 +583,80 @@ async function setCompany(company) {
 }
 
 // ─── Manual item ────────────────────────────────────────────────────────────
+// ─── Búsqueda de datos por tracking ───────────────────────────────────────
+let miLookup = { tracking: '', results: [], asin: '' };
+
+function miLookupBox(html, cls) {
+    const box = document.getElementById('mi-lookup');
+    if (!box) return;
+    if (!html) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    box.style.color = cls === 'error' ? '#f38ba8' : (cls === 'ok' ? '#a6e3a1' : '#9399b2');
+    box.innerHTML = html;
+}
+
+async function lookupTracking(force) {
+    const input = document.getElementById('mi-tracking');
+    if (!input) return;
+    const tracking = input.value.trim();
+    if (!tracking) { miLookup = { tracking: '', results: [], asin: '' }; miLookupBox(''); return; }
+    if (!force && tracking === miLookup.tracking) return;
+    miLookup = { tracking, results: [], asin: '' };
+    miLookupBox('Buscando datos del producto…');
+    try {
+        const res = await fetch(`/api/tracking-lookup?tracking=${encodeURIComponent(tracking)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { miLookupBox(escHtml(data.error || 'No se pudo consultar la API'), 'error'); return; }
+        if (!data.found || !data.results.length) {
+            miLookupBox('Sin datos para ese tracking — completá los campos a mano');
+            return;
+        }
+        miLookup.results = data.results;
+        applyLookupResult(0, false);
+    } catch (err) {
+        miLookupBox('Error al consultar: ' + escHtml(err.message), 'error');
+    }
+}
+
+function applyLookupResult(idx, force) {
+    const r = miLookup.results[idx];
+    if (!r) return;
+    miLookup.asin = r.asin || '';
+    const title = document.getElementById('mi-title');
+    const qty = document.getElementById('mi-qty');
+    const price = document.getElementById('mi-price');
+    const weight = document.getElementById('mi-weight');
+    if (r.title && (force || !title.value.trim())) title.value = r.title;
+    if (r.qty && (force || qty.value.trim() === '' || qty.value.trim() === '1')) qty.value = r.qty;
+    if (r.price != null && (force || price.value.trim() === '')) price.value = r.price;
+    if (r.weight != null && (force || weight.value.trim() === '')) weight.value = r.weight;
+    renderLookupBox(idx);
+}
+
+function renderLookupBox(selected) {
+    const rs = miLookup.results;
+    if (!rs.length) return;
+    const line = (r, i) => `
+        <div style="display:flex;gap:6px;align-items:flex-start;${i === selected ? '' : 'opacity:.7;'}">
+            <span>${i === selected ? '✓' : '•'}</span>
+            <div style="min-width:0;flex:1;">
+                <div style="color:#cdd6f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.title || '(sin título)')}</div>
+                <div style="color:#9399b2;">
+                    ${r.price != null ? '$' + Number(r.price).toFixed(2) : 'sin precio'}
+                    · ${r.qty} u · ${r.weight != null ? r.weight + ' kg' : 'sin peso'}
+                    · ${escHtml(r.tipo)}${r.estado ? ' (' + escHtml(r.estado) + ')' : ''}
+                </div>
+            </div>
+            <button type="button" onclick="applyLookupResult(${i}, true)"
+                    style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#cdd6f4;border-radius:8px;padding:4px 8px;font-size:0.7rem;">Usar</button>
+        </div>`;
+    const head = rs.length > 1 ? `<div style="color:#f9e2af;margin-bottom:4px;">${rs.length} coincidencias — elegí una:</div>` : '';
+    miLookupBox(head + rs.map(line).join('<div style="border-top:1px solid rgba(255,255,255,0.07);margin:4px 0;"></div>'), 'ok');
+}
+
 function openManualItemModal() {
+    miLookup = { tracking: '', results: [], asin: '' };
+    miLookupBox('');
     document.getElementById('mi-title').value = '';
     document.getElementById('mi-qty').value = '1';
     document.getElementById('mi-price').value = '';
@@ -662,7 +753,7 @@ async function submitManualItem() {
         const res = await fetch('/api/items/manual', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, qty, price, tracking, item_type, weight })
+            body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin: miLookup.asin || '' })
         });
         const data = await res.json();
         if (res.ok) {
@@ -800,6 +891,34 @@ async function removeAccountEmail(email) {
         toast(`Cuenta "${email}" quitada`, 'success');
     }
 }
+
+// ─── Config de la API de tracking ───────────────────────────────────
+async function loadTrackingCfg() {
+    try {
+        const res = await fetch('/api/config/tracking');
+        const d = await res.json();
+        const el = document.getElementById('trk-status');
+        if (!el) return;
+        el.textContent = d.configured
+            ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓'
+                          : 'API key: configurada ✓')
+            : 'API key: sin configurar — la búsqueda por tracking está apagada';
+        el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
+    } catch (e) {}
+}
+async function saveTrackingCfg() {
+    const input = document.getElementById('trk-key');
+    const res = await fetch('/api/config/tracking', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ api_key: input.value })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(d.error || 'Error al guardar', 'error'); return; }
+    input.value = '';
+    toast(d.configured ? 'API key guardada' : 'API key borrada', 'success');
+    loadTrackingCfg();
+}
+
 
 // ─── Invoice Counter ───────────────────────────────────────────────────────
 async function loadInvoiceCounter() {
@@ -959,7 +1078,7 @@ function showTab(name) {
     if (name === 'items') loadItems();
     if (name === 'history') loadHistory();
     if (name === 'box') updateNextInvoice();
-    if (name === 'config') { renderPOs(); loadAccountEmails(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+    if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
     localStorage.setItem('lastTab', name);
 }
 

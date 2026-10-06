@@ -237,8 +237,13 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Tracking <span class="text-gray-600">(opcional)</span></label>
-                        <input id="mi-tracking" type="text" class="field w-full px-3 py-2 text-sm" placeholder="TBA..."
-                               onkeydown="if(event.key==='Enter')submitManualItem()">
+                        <div class="flex gap-2">
+                            <input id="mi-tracking" type="text" class="field flex-1 min-w-0 px-3 py-2 text-sm" placeholder="TBA... / MAIL..."
+                                   onblur="lookupTracking()"
+                                   onkeydown="if(event.key==='Enter'){event.preventDefault();lookupTracking();}">
+                            <button type="button" id="mi-lookup-btn" onclick="lookupTracking(true)"
+                                    class="btn-ghost px-3 py-2 rounded-md text-sm shrink-0" title="Buscar los datos del producto por tracking">🔍</button>
+                        </div>
                     </div>
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
@@ -258,6 +263,7 @@
                         </select>
                     </div>
                 </div>
+                <div id="mi-lookup" class="hidden text-xs rounded-md px-3 py-2" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);"></div>
             </div>
             <div class="flex gap-3 justify-end mt-5">
                 <button onclick="closeManualItemModal()" class="px-4 py-2 rounded-lg text-sm hover:bg-gray-700/50">Cancelar</button>
@@ -578,6 +584,22 @@
                     </div>
                 </div>
 
+                <!-- Búsqueda por tracking -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">🔍 Búsqueda por tracking</h3>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Al cargar un ítem manual, si ponés el tracking se buscan automáticamente el título,
+                        el costo, la cantidad y el peso del producto.
+                    </p>
+                    <div class="flex gap-2 items-center">
+                        <input type="password" id="trk-key" placeholder="API key"
+                               class="field flex-1 px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')saveTrackingCfg()">
+                        <button onclick="saveTrackingCfg()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
+                    </div>
+                    <p id="trk-status" class="text-xs text-gray-500 mt-2"></p>
+                </div>
+
                 <!-- Invoice Counter -->
                 <div class="card p-5">
                     <h3 class="text-sm font-semibold text-gray-300 mb-1">Contador de Invoice</h3>
@@ -833,6 +855,33 @@
         }
     }
 
+    // ─── Config de la API de tracking ───────────────────────────────────
+    async function loadTrackingCfg() {
+        try {
+            const res = await fetch('/api/config/tracking');
+            const d = await res.json();
+            const el = document.getElementById('trk-status');
+            if (!el) return;
+            el.textContent = d.configured
+                ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓'
+                              : 'API key: configurada ✓')
+                : 'API key: sin configurar — la búsqueda por tracking está apagada';
+            el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
+        } catch (e) {}
+    }
+    async function saveTrackingCfg() {
+        const input = document.getElementById('trk-key');
+        const res = await fetch('/api/config/tracking', {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ api_key: input.value })
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(d.error || 'Error al guardar', 'error'); return; }
+        input.value = '';
+        toast(d.configured ? 'API key guardada' : 'API key borrada', 'success');
+        loadTrackingCfg();
+    }
+
     // ─── Invoice Counter ────────────────────────────────────────────────
     async function loadInvoiceCounter() {
         try {
@@ -1053,7 +1102,7 @@
         });
         if (name === 'items') loadItems();
         if (name === 'history') loadHistory();
-        if (name === 'config') { renderPOs(); loadAccountEmails(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+        if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
         localStorage.setItem('lastTab', name);
     }
 
@@ -1483,7 +1532,87 @@
         return Math.round(w * 1000) / 1000;
     }
 
+    // ─── Búsqueda de datos por tracking ─────────────────────────────────
+    // Al cargar un ítem manual, si el tracking existe en envíos/devoluciones/almacén
+    // traemos título, costo, cantidad, peso y ASIN para no tipearlos a mano.
+    let miLookup = { tracking: '', results: [], asin: '' };
+
+    function miLookupBox(html, cls) {
+        const box = document.getElementById('mi-lookup');
+        if (!box) return;
+        if (!html) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+        box.classList.remove('hidden');
+        box.style.color = cls === 'error' ? '#f38ba8' : (cls === 'ok' ? '#a6e3a1' : '#9399b2');
+        box.innerHTML = html;
+    }
+
+    async function lookupTracking(force) {
+        const input = document.getElementById('mi-tracking');
+        if (!input) return;
+        const tracking = input.value.trim();
+        if (!tracking) { miLookup = { tracking: '', results: [], asin: '' }; miLookupBox(''); return; }
+        if (!force && tracking === miLookup.tracking) return;   // ya lo buscamos
+        miLookup = { tracking, results: [], asin: '' };
+        miLookupBox('Buscando datos del producto…');
+        try {
+            const res = await fetch(`/api/tracking-lookup?tracking=${encodeURIComponent(tracking)}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) { miLookupBox(escHtml(data.error || 'No se pudo consultar la API'), 'error'); return; }
+            if (!data.found || !data.results.length) {
+                miLookupBox('Sin datos para ese tracking — completá los campos a mano');
+                return;
+            }
+            miLookup.results = data.results;
+            applyLookupResult(0, false);
+        } catch (err) {
+            miLookupBox('Error al consultar: ' + escHtml(err.message), 'error');
+        }
+    }
+
+    // Completa el formulario. Sin force solo llena lo que esté vacío o en su valor por defecto.
+    function applyLookupResult(idx, force) {
+        const r = miLookup.results[idx];
+        if (!r) return;
+        miLookup.asin = r.asin || '';
+        const title = document.getElementById('mi-title');
+        const qty = document.getElementById('mi-qty');
+        const price = document.getElementById('mi-price');
+        const weight = document.getElementById('mi-weight');
+        if (r.title && (force || !title.value.trim())) title.value = r.title;
+        if (r.qty && (force || qty.value.trim() === '' || qty.value.trim() === '1')) qty.value = r.qty;
+        if (r.price != null && (force || price.value.trim() === '')) price.value = r.price;
+        if (r.weight != null && (force || weight.value.trim() === '')) weight.value = r.weight;
+        renderLookupBox(idx);
+    }
+
+    function renderLookupBox(selected) {
+        const rs = miLookup.results;
+        if (!rs.length) return;
+        const line = (r, i) => `
+            <div class="flex items-start gap-2 ${i === selected ? '' : 'opacity-70'}">
+                <span class="shrink-0">${i === selected ? '✓' : '•'}</span>
+                <div class="min-w-0 flex-1">
+                    <div class="truncate" style="color:#cdd6f4;">${escHtml(r.title || '(sin título)')}</div>
+                    <div style="color:#9399b2;">
+                        ${r.price != null ? '$' + Number(r.price).toFixed(2) : 'sin precio'}
+                        · ${r.qty} u
+                        · ${r.weight != null ? r.weight + ' kg' : 'sin peso'}
+                        ${r.asin ? '· ' + escHtml(r.asin) : ''}
+                        · ${escHtml(r.tipo)}${r.estado ? ' (' + escHtml(r.estado) + ')' : ''}
+                    </div>
+                </div>
+                ${i === selected
+                    ? `<button type="button" onclick="applyLookupResult(${i}, true)" class="btn-ghost px-2 py-1 rounded text-xs shrink-0">Usar estos datos</button>`
+                    : `<button type="button" onclick="applyLookupResult(${i}, true)" class="btn-ghost px-2 py-1 rounded text-xs shrink-0">Usar</button>`}
+            </div>`;
+        const head = rs.length > 1
+            ? `<div class="mb-1" style="color:#f9e2af;">${rs.length} coincidencias para ese tracking — elegí una:</div>` : '';
+        miLookupBox(head + rs.map(line).join('<div class="my-1" style="border-top:1px solid rgba(255,255,255,0.07);"></div>'), 'ok');
+    }
+
     function openManualItemModal() {
+        miLookup = { tracking: '', results: [], asin: '' };
+        miLookupBox('');
         document.getElementById('mi-title').value = '';
         document.getElementById('mi-weight').value = '';
         document.getElementById('mi-qty').value = '1';
@@ -1580,7 +1709,7 @@
             const res = await fetch('/api/items/manual', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, qty, price, tracking, item_type, weight })
+                body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin: miLookup.asin || '' })
             });
             const data = await res.json();
             if (res.ok) {

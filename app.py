@@ -161,7 +161,8 @@ def _migrate_config(cfg):
     if 'companies' not in cfg:
         flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
         flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
-        cfg = {'companies': {'zero': flat}}
+        globals_kept = {k: cfg[k] for k in ('tracking_api_key',) if k in cfg}
+        cfg = {'companies': {'zero': flat}, **globals_kept}
     cfg.setdefault('companies', {})
     for comp in VALID_COMPANIES:
         cfg['companies'].setdefault(comp, {'accepted_pos': list(DEFAULT_CONFIG['accepted_pos'])})
@@ -577,6 +578,48 @@ def clean_csv_value(val):
     elif val.endswith('"'):
         val = val[:-1]
     return val.strip()
+
+# ─── Lookup de tracking (API externa) ───────────────────────────────────────
+# Busca un tracking en envíos / devoluciones / almacén y devuelve título,
+# precio y peso del producto para autocompletar el alta manual.
+TRACKING_LOOKUP_URL = os.environ.get(
+    'TRACKING_LOOKUP_URL',
+    'https://xxsdwlnvpbnhmjgniisy.supabase.co/functions/v1/api-tracking-lookup')
+
+def get_tracking_api_key():
+    """La clave sale del entorno (preferido) o del config. Nunca del código."""
+    return (os.environ.get('TRACKING_API_KEY', '')
+            or load_config().get('tracking_api_key', '') or '').strip()
+
+def parse_peso_kg(val):
+    """La API devuelve el peso como texto ("0.45 kg", "1,15 kg"). Lo pasa a float."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return parse_weight(val)
+    m = re.search(r'-?\d+(?:[.,]\d+)?', str(val))
+    if not m:
+        return None
+    try:
+        return parse_weight(m.group(0))
+    except ValueError:
+        return None
+
+def _tracking_lookup_call(tracking, api_key, timeout=12):
+    """Una llamada a la API. Devuelve (status_code, dict) o lanza URLError."""
+    body = _json.dumps({'tracking': tracking}).encode()
+    req = urllib.request.Request(
+        TRACKING_LOOKUP_URL, data=body, method='POST',
+        headers={'Content-Type': 'application/json', 'x-api-key': api_key,
+                 'Authorization': f'Bearer {api_key}'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, _json.loads(resp.read().decode() or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, _json.loads(e.read().decode() or '{}')
+        except Exception:
+            return e.code, {}
 
 def parse_weight(val):
     """Peso unitario en kg. Es opcional: vacío/None devuelve None (sin cargar)."""
@@ -2301,17 +2344,100 @@ def add_manual_item():
         weight = parse_weight(data.get('weight'))
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    asin = str(data.get('asin', '') or '').strip()[:20]
     order_id = tracking or f"MANUAL-{int(datetime.now().timestamp())}"
     order_date = date.today().strftime('%d/%m/%Y')
     conn = get_db()
     cur = conn.execute("""
         INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status, total_neto, tracking, status, company, item_type, weight)
-        VALUES (?, '', ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?, ?, ?)
-    """, (order_id, title, price, qty, order_date, round(price * qty, 2), tracking, company, item_type, weight))
+        VALUES (?, ?, ?, ?, ?, NULL, ?, 'Manual', ?, ?, 'pending', ?, ?, ?)
+    """, (order_id, asin, title, price, qty, order_date, round(price * qty, 2), tracking, company, item_type, weight))
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
     return jsonify({'message': 'Ítem agregado', 'id': new_id})
+
+@app.route('/api/tracking-lookup')
+def tracking_lookup():
+    """Busca un tracking en la API externa y devuelve los datos del producto.
+
+    La clave de la API vive en el servidor (variable de entorno TRACKING_API_KEY
+    o config), nunca en el navegador.
+    """
+    tracking = (request.args.get('tracking') or '').strip()
+    if not tracking:
+        return jsonify({'error': 'Falta el tracking'}), 400
+    api_key = get_tracking_api_key()
+    if not api_key:
+        return jsonify({'error': 'Falta configurar la clave de la API de tracking '
+                                 '(Configuración → Búsqueda por tracking).',
+                        'not_configured': True}), 503
+
+    # La API dice ser case-insensitive pero en la práctica no lo es:
+    # probamos tal cual, en mayúsculas y en minúsculas antes de darnos por vencidos.
+    candidates = list(dict.fromkeys([tracking, tracking.upper(), tracking.lower()]))
+    data, status = {}, 0
+    for cand in candidates:
+        try:
+            status, data = _tracking_lookup_call(cand, api_key)
+        except Exception as e:
+            app.logger.warning('tracking-lookup falló para %s: %s', cand, e)
+            return jsonify({'error': 'No se pudo consultar la API de tracking'}), 502
+        if status == 401 or status == 403:
+            return jsonify({'error': 'La API rechazó la clave (no autorizado)'}), 502
+        if data.get('success') and data.get('results'):
+            break
+
+    if not data.get('success') or not data.get('results'):
+        return jsonify({'found': False, 'tracking': tracking,
+                        'message': data.get('error') or 'Sin resultados para ese tracking'})
+
+    results = []
+    for r in data.get('results') or []:
+        precio = r.get('precio_costo')
+        if precio in (None, ''):
+            precio = r.get('precio_proveedor_actual')
+        try:
+            precio = round(float(precio), 2)
+        except (TypeError, ValueError):
+            precio = None
+        try:
+            qty = int(r.get('cantidad') or 1)
+        except (TypeError, ValueError):
+            qty = 1
+        results.append({
+            'tipo': r.get('tipo') or '',
+            'asin': (r.get('asin') or '').strip(),
+            'title': (r.get('titulo') or '').strip(),
+            'price': precio,
+            'qty': max(qty, 1),
+            'weight': parse_peso_kg(r.get('peso')),
+            'orden': str(r.get('orden') or ''),
+            'estado': r.get('estado') or '',
+            'neto_ml': r.get('neto_ml'),
+            'precio_proveedor_actual': r.get('precio_proveedor_actual'),
+        })
+    return jsonify({'found': True, 'tracking': data.get('tracking') or tracking,
+                    'count': len(results), 'results': results})
+
+@app.route('/api/config/tracking', methods=['GET'])
+def get_tracking_config():
+    key = get_tracking_api_key()
+    return jsonify({'configured': bool(key),
+                    'from_env': bool(os.environ.get('TRACKING_API_KEY', '').strip()),
+                    'url': TRACKING_LOOKUP_URL})
+
+@app.route('/api/config/tracking', methods=['PUT'])
+def set_tracking_config():
+    data = request.get_json() or {}
+    key = str(data.get('api_key', '')).strip()
+    cfg = load_config()
+    if key:
+        cfg['tracking_api_key'] = key
+    else:
+        cfg.pop('tracking_api_key', None)
+    save_config(cfg)
+    return jsonify({'configured': bool(get_tracking_api_key())})
 
 @app.route('/api/items/<int:item_id>', methods=['DELETE'])
 def delete_item(item_id):
