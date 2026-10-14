@@ -1419,6 +1419,10 @@ async function generateInvoice() {
         });
         if (res.ok) {
             const emailStatus = res.headers.get('X-Email-Status');
+            const split = parseInt(res.headers.get('X-Split-Items') || '0');
+            if (split > 0) {
+                toast(`${split} ítem(s) salieron parciales: el resto volvió a Pendiente`, 'info');
+            }
             const emailAddress = res.headers.get('X-Email-Address');
             const emailError = res.headers.get('X-Email-Error');
             const blob = await res.blob();
@@ -1482,6 +1486,10 @@ async function generateRemito() {
         });
         if (res.ok) {
             const emailStatus = res.headers.get('X-Email-Status');
+            const split = parseInt(res.headers.get('X-Split-Items') || '0');
+            if (split > 0) {
+                toast(`${split} ítem(s) salieron parciales: el resto volvió a Pendiente`, 'info');
+            }
             const emailAddress = res.headers.get('X-Email-Address');
             const emailError = res.headers.get('X-Email-Error');
             const blob = await res.blob();

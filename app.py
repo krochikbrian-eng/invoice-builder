@@ -1520,6 +1520,40 @@ def get_items():
     conn.close()
     return jsonify(items)
 
+def split_partial_item(conn, row, qty_usada):
+    """Si del ítem se factura/envía menos de lo que hay, lo parte en dos.
+
+    El original queda con la cantidad que efectivamente sale (y se marca como
+    facturado afuera de esta función) y el sobrante se guarda como un ítem nuevo,
+    idéntico, en estado Pendiente. Devuelve el id del ítem nuevo o None.
+    """
+    try:
+        qty_total = int(row['qty'])
+        qty_usada = int(qty_usada)
+    except (TypeError, ValueError):
+        return None
+    if qty_usada <= 0 or qty_usada >= qty_total:
+        return None
+    resto = qty_total - qty_usada
+    precio = row['price'] or 0
+    cols = row.keys()
+    def val(name, default=None):
+        return row[name] if name in cols else default
+
+    # El original se queda con lo que sale en este envío
+    conn.execute("UPDATE items SET qty = ?, total_neto = ? WHERE id = ?",
+                 (qty_usada, round(precio * qty_usada, 2), row['id']))
+    # Y el sobrante vuelve a la lista como un ítem aparte, igual pero pendiente
+    cur = conn.execute("""
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status,
+                           total_neto, tracking, status, company, item_type, weight, invoice_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NULL)
+    """, (val('order_id', ''), val('asin', ''), val('title', ''), precio, resto,
+          val('po'), val('order_date', ''), val('order_status', ''),
+          round(precio * resto, 2), val('tracking', ''), val('company', 'zero'),
+          val('item_type', 'comercial') or 'comercial', val('weight')))
+    return cur.lastrowid
+
 @app.route('/api/generate', methods=['POST'])
 def generate_invoice():
     """Generate invoice from selected items."""
@@ -1553,10 +1587,12 @@ def generate_invoice():
 
     items = []
     order_ids = set()
+    qty_usada = {}          # id -> cantidad que efectivamente sale en este envío
     for row in rows:
         # Use quantity from request if provided
         qty_override = data.get('quantities', {}).get(str(row['id']))
         qty = int(qty_override) if qty_override else row['qty']
+        qty_usada[row['id']] = qty
         items.append({
             'title': row['title'],
             'price': row['price'],
@@ -1606,6 +1642,13 @@ def generate_invoice():
 
     zip_buf.seek(0)
     zip_data = zip_buf.read()
+
+    # Si de algún ítem sale menos de lo que había, el sobrante vuelve a Pendiente
+    # como un ítem aparte (mismo producto, mismo tipo, misma info).
+    sobrantes = 0
+    for row in rows:
+        if split_partial_item(conn, row, qty_usada.get(row['id'], row['qty'])):
+            sobrantes += 1
 
     # Files built OK — now persist: create the invoice record and mark items as invoiced
     cursor = conn.execute(
@@ -1670,7 +1713,8 @@ def generate_invoice():
     response.headers['X-Email-Status'] = _hdr(email_status)
     response.headers['X-Email-Address'] = _hdr(email_address)
     response.headers['X-Email-Error'] = _hdr(email_error)
-    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
+    response.headers['X-Split-Items'] = str(sobrantes)
+    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error, X-Split-Items'
     return response
 
 @app.route('/api/generate-remito', methods=['POST'])
@@ -1703,9 +1747,11 @@ def generate_remito():
 
     items = []
     order_ids = set()
+    qty_usada = {}          # id -> cantidad que efectivamente sale en este envío
     for row in rows:
         qty_override = data.get('quantities', {}).get(str(row['id']))
         qty = int(qty_override) if qty_override else row['qty']
+        qty_usada[row['id']] = qty
         items.append({
             'title': row['title'],
             'price': row['price'],
@@ -1753,6 +1799,13 @@ def generate_remito():
 
     zip_buf.seek(0)
     zip_data = zip_buf.read()
+
+    # Si de algún ítem sale menos de lo que había, el sobrante vuelve a Pendiente
+    # como un ítem aparte (mismo producto, mismo tipo, misma info).
+    sobrantes = 0
+    for row in rows:
+        if split_partial_item(conn, row, qty_usada.get(row['id'], row['qty'])):
+            sobrantes += 1
 
     # Files built OK — now persist: create the record and mark items as invoiced
     cursor = conn.execute(
@@ -1815,7 +1868,8 @@ def generate_remito():
     response.headers['X-Email-Status'] = _hdr(email_status)
     response.headers['X-Email-Address'] = _hdr(email_address)
     response.headers['X-Email-Error'] = _hdr(email_error)
-    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
+    response.headers['X-Split-Items'] = str(sobrantes)
+    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error, X-Split-Items'
     return response
 
 @app.route('/api/remitos/<int:invoice_id>/download')
@@ -2027,6 +2081,11 @@ def add_items_to_invoice(invoice_id):
     invoice_number = inv['invoice_number']
     invoice_date = datetime.strptime(inv['date'], '%Y-%m-%d').date()
     inv_type = inv['type'] or 'invoice'
+
+    # Si de algún ítem nuevo sale menos de lo que había, el sobrante vuelve a
+    # Pendiente como un ítem aparte (mismo producto, mismo tipo).
+    for r in new_rows:
+        split_partial_item(conn, r, _safe_qty(data.get('quantities', {}).get(str(r['id'])), r['qty']))
 
     # Link new items to invoice
     conn.execute(
