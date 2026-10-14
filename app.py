@@ -1520,6 +1520,27 @@ def get_items():
     conn.close()
     return jsonify(items)
 
+def qty_from_request(raw, disponible):
+    """Cantidad a facturar de un ítem, acotada a lo que realmente hay.
+
+    Nunca se puede facturar más de lo disponible ni menos de 1: si el valor que
+    llega es basura, negativo o mayor al stock, se usa el stock entero.
+    """
+    try:
+        disponible = int(disponible)
+    except (TypeError, ValueError):
+        disponible = 1
+    disponible = max(disponible, 1)
+    if raw is None or raw == '':
+        return disponible
+    try:
+        q = int(float(str(raw).strip().replace(',', '.')))
+    except (TypeError, ValueError):
+        return disponible
+    if q <= 0:
+        return disponible
+    return min(q, disponible)
+
 def split_partial_item(conn, row, qty_usada):
     """Si del ítem se factura/envía menos de lo que hay, lo parte en dos.
 
@@ -1589,9 +1610,8 @@ def generate_invoice():
     order_ids = set()
     qty_usada = {}          # id -> cantidad que efectivamente sale en este envío
     for row in rows:
-        # Use quantity from request if provided
-        qty_override = data.get('quantities', {}).get(str(row['id']))
-        qty = int(qty_override) if qty_override else row['qty']
+        # Cantidad pedida, nunca mayor a lo que hay disponible
+        qty = qty_from_request(data.get('quantities', {}).get(str(row['id'])), row['qty'])
         qty_usada[row['id']] = qty
         items.append({
             'title': row['title'],
@@ -1749,8 +1769,7 @@ def generate_remito():
     order_ids = set()
     qty_usada = {}          # id -> cantidad que efectivamente sale en este envío
     for row in rows:
-        qty_override = data.get('quantities', {}).get(str(row['id']))
-        qty = int(qty_override) if qty_override else row['qty']
+        qty = qty_from_request(data.get('quantities', {}).get(str(row['id'])), row['qty'])
         qty_usada[row['id']] = qty
         items.append({
             'title': row['title'],
@@ -2050,31 +2069,24 @@ def add_items_to_invoice(invoice_id):
     # Apply discount only to new items
     discount = float(data.get('discount', 0) or 0)
 
-    def _safe_qty(raw, fallback):
-        """Parse a quantity defensively — never blow up on '', None or junk."""
-        for candidate in (raw, fallback):
-            try:
-                q = int(float(str(candidate).strip()))
-                if q > 0:
-                    return q
-            except (TypeError, ValueError, AttributeError):
-                continue
-        return 1
-
-    def row_to_item(row, apply_discount=False):
+    def row_to_item(row, apply_discount=False, usar_quantities=False):
         price = row['price'] or 0
         if apply_discount and discount > 0:
             price = round(price * (1 - discount / 100), 1)
+        # Las cantidades que manda el cliente solo valen para los ítems que se
+        # están agregando ahora; los que ya estaban en la factura no se tocan.
+        qty = (qty_from_request(data.get('quantities', {}).get(str(row['id'])), row['qty'])
+               if usar_quantities else row['qty'])
         return {
             'title': row['title'] or '',
             'price': price,
-            'qty': _safe_qty(data.get('quantities', {}).get(str(row['id'])), row['qty']),
+            'qty': qty,
             'order_id': row['order_id'] or '',
             'tracking': (row['tracking'] if 'tracking' in row.keys() else '') or '',
         }
 
     all_items = [row_to_item(r, apply_discount=False) for r in existing_rows] + \
-                [row_to_item(r, apply_discount=True) for r in new_rows]
+                [row_to_item(r, apply_discount=True, usar_quantities=True) for r in new_rows]
 
     # Recalculate total
     total = sum(i['price'] * i['qty'] for i in all_items)
@@ -2084,13 +2096,17 @@ def add_items_to_invoice(invoice_id):
 
     # Si de algún ítem nuevo sale menos de lo que había, el sobrante vuelve a
     # Pendiente como un ítem aparte (mismo producto, mismo tipo).
+    sobrantes = 0
     for r in new_rows:
-        split_partial_item(conn, r, _safe_qty(data.get('quantities', {}).get(str(r['id'])), r['qty']))
+        if split_partial_item(conn, r, qty_from_request(data.get('quantities', {}).get(str(r['id'])), r['qty'])):
+            sobrantes += 1
 
-    # Link new items to invoice
+    # Link new items to invoice — solo los que efectivamente estaban pendientes
+    ids_a_marcar = [r['id'] for r in new_rows]
+    marcar_ph = ','.join('?' * len(ids_a_marcar))
     conn.execute(
-        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({placeholders})",
-        [invoice_id] + list(new_item_ids)
+        f"UPDATE items SET status = 'invoiced', invoice_id = ? WHERE id IN ({marcar_ph})",
+        [invoice_id] + ids_a_marcar
     )
     # Update invoice totals
     conn.execute(
@@ -2194,7 +2210,8 @@ def add_items_to_invoice(invoice_id):
     response.headers['X-Email-Status'] = _hdr(email_status)
     response.headers['X-Email-Address'] = _hdr(email_address)
     response.headers['X-Email-Error'] = _hdr(email_error)
-    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error'
+    response.headers['X-Split-Items'] = str(sobrantes)
+    response.headers['Access-Control-Expose-Headers'] = 'X-Email-Status, X-Email-Address, X-Email-Error, X-Split-Items'
     return response
 
 
