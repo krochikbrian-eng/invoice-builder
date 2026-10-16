@@ -278,6 +278,8 @@
         <div id="mi-lookup" class="hidden text-xs mb-3 rounded-lg px-3 py-2" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);"></div>
         <label class="text-xs text-gray-400 block mb-1">Peso c/u <span class="text-gray-600">(kg, opcional)</span></label>
         <input id="mi-weight" type="number" inputmode="decimal" min="0" step="0.001" class="field w-full px-3 py-3 text-sm mb-3" placeholder="—">
+        <label class="text-xs text-gray-400 block mb-1">ASIN <span class="text-gray-600">(opcional)</span></label>
+        <input id="mi-asin" type="text" class="field w-full px-3 py-3 text-sm mb-3" placeholder="B0..." style="font-family:ui-monospace,monospace;">
         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
         <select id="mi-type" class="field w-full px-3 py-3 text-sm mb-5">
             <option value="comercial">🏢 Comercial</option>
@@ -647,6 +649,8 @@ function applyLookupResult(idx, force) {
     if (r.qty && (force || qty.value.trim() === '' || qty.value.trim() === '1')) qty.value = r.qty;
     if (r.price != null && (force || price.value.trim() === '')) price.value = r.price;
     if (r.weight != null && (force || weight.value.trim() === '')) weight.value = r.weight;
+    const asin = document.getElementById('mi-asin');
+    if (asin && r.asin && (force || !asin.value.trim())) asin.value = r.asin;
     renderLookupBox(idx);
 }
 
@@ -680,6 +684,7 @@ function openManualItemModal() {
     document.getElementById('mi-tracking').value = '';
     document.getElementById('mi-type').value = 'comercial';
     document.getElementById('mi-weight').value = '';
+    document.getElementById('mi-asin').value = '';
     document.getElementById('manual-item-modal').classList.add('open');
     setTimeout(() => document.getElementById('mi-title').focus(), 50);
 }
@@ -760,6 +765,7 @@ async function submitManualItem() {
     const tracking = document.getElementById('mi-tracking').value.trim();
     const item_type = document.getElementById('mi-type').value;
     const weight = readWeightInput('mi-weight');
+    const asin = document.getElementById('mi-asin').value.trim().toUpperCase();
     if (weight === false) { toast('Peso inválido', 'error'); return; }
     if (!title) { toast('Ingresá un título', 'error'); return; }
     if (!qty || qty <= 0) { toast('Cantidad inválida', 'error'); return; }
@@ -770,7 +776,7 @@ async function submitManualItem() {
         const res = await fetch('/api/items/manual', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin: (miLookup.tracking === tracking ? (miLookup.asin || '') : '') })
+            body: JSON.stringify({ title, qty, price, tracking, item_type, weight, asin })
         });
         const data = await res.json();
         if (res.ok) {
@@ -1115,14 +1121,12 @@ async function sendToWarehouse(itemId, force) {
     const item = allItems.find(i => i.id === itemId);
     if (!force) {
         if (!item) return;
-        const faltan = [];
-        if (!(item.asin || '').trim()) faltan.push('el ASIN');
-        if (!(item.tracking || '').trim()) faltan.push('el tracking');
-        if (faltan.length) {
+        // Sin tracking no hay nada que hacer; el ASIN, si falta, lo busca el servidor.
+        if (!(item.tracking || '').trim()) {
             await confirmDialog({
                 icon: '⚠️',
-                title: 'Falta un dato obligatorio',
-                message: `A este ítem le falta ${faltan.join(' y ')}, y el Almacén lo exige para poder cargarlo.\n\n`
+                title: 'Falta el tracking',
+                message: `A este ítem le falta el tracking, y el Almacén lo exige para poder cargarlo.\n\n`
                        + `${item.title}\n\n`
                        + `Completalo con el lápiz ✏️ y volvé a intentar.`,
                 confirmText: 'Entendido',
@@ -1131,12 +1135,13 @@ async function sendToWarehouse(itemId, force) {
             return;
         }
         const emp = (localStorage.getItem('activeCompany') === 'lime') ? 'Lime' : 'Zero';
+        const asinTxt = (item.asin || '').trim() || 'se busca por tracking';
         const ok = await confirmDialog({
             icon: '🏬',
             title: 'Enviar al Almacén',
             message: `Se va a cargar en el Almacén VTI de ${emp}:\n\n`
                    + `${item.title}\n`
-                   + `ASIN ${item.asin || '—'} · Tracking ${item.tracking || '—'}\n`
+                   + `ASIN ${asinTxt} · Tracking ${item.tracking}\n`
                    + `${item.qty} unidad(es) · $${Number(item.price).toFixed(2)}\n\n`
                    + `El ítem va a quedar en estado Enviado.`,
             confirmText: 'Enviar al Almacén'
@@ -1151,7 +1156,7 @@ async function sendToWarehouse(itemId, force) {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
             toast(data.message || 'Enviado al Almacén', 'success');
-            if (item) { item.warehouse_at = data.warehouse_at; item.status = data.status || 'sent'; }
+            if (item) { item.warehouse_at = data.warehouse_at; item.status = data.status || 'sent'; if (data.asin) item.asin = data.asin; }
             loadItems();
             return;
         }

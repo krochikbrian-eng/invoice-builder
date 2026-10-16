@@ -649,6 +649,23 @@ WAREHOUSE_COMPANY = {'zero': 'Zero', 'lime': 'Lime'}
 # Siempre se carga en el mismo depósito
 WAREHOUSE_DEPOSITO = 'VTI'
 
+def _asin_por_tracking(tracking):
+    """Intenta resolver el ASIN de un tracking con la API de lookup. '' si no se puede."""
+    key = get_tracking_api_key()
+    if not key or not tracking:
+        return ''
+    for cand in dict.fromkeys([tracking, tracking.upper()]):
+        try:
+            status, data = _tracking_lookup_call(cand, key)
+        except Exception:
+            return ''
+        if not isinstance(data, dict):
+            continue
+        for r in (data.get('results') or []):
+            if isinstance(r, dict) and (r.get('asin') or '').strip():
+                return (r.get('asin') or '').strip()
+    return ''
+
 def get_warehouse_api_key():
     """Clave del Almacén: del entorno (preferido) o del config. Nunca del código."""
     return (os.environ.get('WAREHOUSE_API_KEY', '')
@@ -2596,11 +2613,23 @@ def send_item_to_warehouse(item_id):
     asin = (row['asin'] or '').strip()
     tracking = (row['tracking'] if 'tracking' in cols else '') or ''
     tracking = tracking.strip()
-    faltan = [n for n, v in (('ASIN', asin), ('tracking', tracking)) if not v]
-    if faltan:
+    if not tracking:
         conn.close()
-        return jsonify({'error': f'El ítem no tiene {" ni ".join(faltan)}; '
-                                 f'el Almacén los necesita. Completalos y volvé a intentar.'}), 400
+        return jsonify({'error': 'El ítem no tiene tracking; el Almacén lo necesita. '
+                                 'Completalo y volvé a intentar.'}), 400
+
+    # Si falta el ASIN lo buscamos por tracking antes de dar error: si la otra API
+    # lo conoce, lo completamos en el ítem y seguimos.
+    asin_autocompletado = False
+    if not asin:
+        asin = _asin_por_tracking(tracking)
+        if asin:
+            conn.execute("UPDATE items SET asin = ? WHERE id = ?", (asin, item_id))
+            asin_autocompletado = True
+    if not asin:
+        conn.close()
+        return jsonify({'error': 'El ítem no tiene ASIN y tampoco se encontró buscándolo por '
+                                 'tracking; el Almacén lo necesita. Completalo y volvé a intentar.'}), 400
 
     ya = (row['warehouse_at'] if 'warehouse_at' in cols else None)
     if ya and not data.get('force'):
@@ -2653,8 +2682,12 @@ def send_item_to_warehouse(item_id):
     conn.execute("UPDATE items SET warehouse_at = ?, status = 'sent' WHERE id = ?", (ahora, item_id))
     conn.commit()
     conn.close()
-    return jsonify({'message': f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}',
-                    'warehouse_at': ahora, 'status': 'sent', 'sent': payload, 'response': resp})
+    msg = f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
+    if asin_autocompletado:
+        msg += f' (ASIN {asin} completado por tracking)'
+    return jsonify({'message': msg, 'warehouse_at': ahora, 'status': 'sent',
+                    'asin': asin, 'asin_autocompletado': asin_autocompletado,
+                    'sent': payload, 'response': resp})
 
 @app.route('/api/config/warehouse', methods=['GET'])
 def get_warehouse_config():
