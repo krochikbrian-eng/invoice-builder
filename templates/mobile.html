@@ -1379,7 +1379,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
-                    ${(item.item_type === 'almacen' && item.status === 'pending' && !item.warehouse_at) ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
+                    ${(item.item_type === 'almacen' && item.status === 'pending') ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>
