@@ -405,6 +405,7 @@
                     <input type="file" id="csv-input" accept=".csv" class="hidden" onchange="uploadFile(this.files[0])">
                     <button onclick="document.getElementById('csv-input').click()" class="btn-primary px-6 py-2 rounded-lg">Elegir Archivo</button>
                 </div>
+                <p id="last-upload" class="text-sm text-gray-500 mt-4 text-center"></p>
                 <div id="upload-status" class="mt-4 hidden">
                     <div class="flex items-center gap-2">
                         <div class="animate-spin w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
@@ -1094,12 +1095,40 @@
     }
 
     // ─── Tabs ───────────────────────────────────────────────────────────
+    // ─── Última subida ──────────────────────────────────────────────────
+    function fmtAgo(iso) {
+        const d = new Date(iso);
+        if (isNaN(d)) return '';
+        const dias = Math.floor((new Date().setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 86400000);
+        const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        if (dias === 0) return `hoy ${hora}`;
+        if (dias === 1) return `ayer ${hora}`;
+        return `${d.toLocaleDateString('es-AR')} ${hora}`;
+    }
+    async function loadLastUpload() {
+        const el = document.getElementById('last-upload');
+        if (!el) return;
+        try {
+            const res = await fetch('/api/upload/last');
+            const d = await res.json();
+            if (!d || !d.at) {
+                el.textContent = 'Todavía no se subió ningún CSV para esta empresa.';
+                return;
+            }
+            const partes = [`${d.saved} ítem(s) nuevos`];
+            if (d.skipped) partes.push(`${d.skipped} duplicados`);
+            el.innerHTML = `Última subida: <span class="text-gray-300">${escHtml(fmtAgo(d.at))}</span> · ${partes.join(' · ')}`
+                + (d.filename ? `<br><span class="text-xs text-gray-600">${escHtml(d.filename)}</span>` : '');
+        } catch (e) {}
+    }
+
     function showTab(name) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
         document.getElementById(`tab-${name}`).classList.remove('hidden');
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.toggle('tab-active', btn.dataset.tab === name);
         });
+        if (name === 'upload') loadLastUpload();
         if (name === 'items') loadItems();
         if (name === 'history') loadHistory();
         if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
@@ -1174,6 +1203,7 @@
             const data = await res.json();
             if (res.ok) {
                 toast(`${data.message}`, 'success');
+                loadLastUpload();
                 showTab('items');
             } else if (data.wrong_account) {
                 confirmDialog({

@@ -1469,12 +1469,30 @@ def upload_csv():
     conn.commit()
     conn.close()
 
+    # Dejamos registrada la última subida de esta empresa para mostrarla en pantalla
+    full = load_config()
+    full['companies'][company]['last_upload'] = {
+        'at': datetime.now().isoformat(timespec='seconds'),
+        'filename': (file.filename or '')[:120],
+        'saved': saved,
+        'skipped': skipped,
+        'parsed': len(items),
+    }
+    save_config(full)
+
     return jsonify({
         'message': f'Se importaron {saved} ítems, se saltaron {skipped} duplicados',
         'saved': saved,
         'skipped': skipped,
         'total_parsed': len(items)
     })
+
+@app.route('/api/upload/last')
+def last_upload():
+    """Datos de la última subida de CSV de la empresa activa."""
+    company = get_company()
+    info = company_cfg(company).get('last_upload')
+    return jsonify(info or {})
 
 @app.route('/api/items')
 def get_items():
