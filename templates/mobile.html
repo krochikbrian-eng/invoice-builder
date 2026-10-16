@@ -1794,6 +1794,7 @@ async function changeItemType(itemId, newType) {
             const it = allItems.find(i => i.id === itemId);
             if (it) it.item_type = newType;
             toast({comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'}[newType] || newType, 'success');
+            renderItems();   // el botón del Almacén depende del tipo
         } else {
             toast(data.error || 'Error al cambiar tipo', 'error');
             loadItems();

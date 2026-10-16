@@ -2503,6 +2503,7 @@
                 if (it) it.item_type = newType;
                 const _tl = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'}[newType] || newType;
                 toast('Tipo: ' + _tl, 'success');
+                renderItems();   // el botón del Almacén depende del tipo
             } else {
                 toast(data.error || 'Error al cambiar tipo', 'error');
                 loadItems();
