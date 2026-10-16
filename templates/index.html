@@ -1145,6 +1145,21 @@
         const item = allItems.find(i => i.id === itemId);
         if (!force) {
             if (!item) return;
+            const faltan = [];
+            if (!(item.asin || '').trim()) faltan.push('el ASIN');
+            if (!(item.tracking || '').trim()) faltan.push('el tracking');
+            if (faltan.length) {
+                await confirmDialog({
+                    icon: '⚠️',
+                    title: 'Falta un dato obligatorio',
+                    message: `A este ítem le falta ${faltan.join(' y ')}, y el Almacén lo exige para poder cargarlo.\n\n`
+                           + `${item.title}\n\n`
+                           + `Completalo con el lápiz ✏️ y volvé a intentar.`,
+                    confirmText: 'Entendido',
+                    cancelText: ''
+                });
+                return;
+            }
             const emp = (localStorage.getItem('activeCompany') === 'lime') ? 'Lime' : 'Zero';
             const ok = await confirmDialog({
                 icon: '🏬',
@@ -1517,8 +1532,7 @@
                             </button>
                             ${(item.item_type === 'almacen' && item.status === 'pending' && !item.warehouse_at) ? `
                             <button onclick="event.stopPropagation(); sendToWarehouse(${item.id})"
-                                    class="btn-ghost px-2 py-1 rounded text-xs whitespace-nowrap"
-                                    title="Cargar este ítem en el Almacén VTI">
+                                    class="btn-ghost px-2 py-1 rounded text-xs whitespace-nowrap">
                                 🏬 Enviar a Almacén
                             </button>` : ''}
                         </div>

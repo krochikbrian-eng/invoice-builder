@@ -1115,6 +1115,21 @@ async function sendToWarehouse(itemId, force) {
     const item = allItems.find(i => i.id === itemId);
     if (!force) {
         if (!item) return;
+        const faltan = [];
+        if (!(item.asin || '').trim()) faltan.push('el ASIN');
+        if (!(item.tracking || '').trim()) faltan.push('el tracking');
+        if (faltan.length) {
+            await confirmDialog({
+                icon: '⚠️',
+                title: 'Falta un dato obligatorio',
+                message: `A este ítem le falta ${faltan.join(' y ')}, y el Almacén lo exige para poder cargarlo.\n\n`
+                       + `${item.title}\n\n`
+                       + `Completalo con el lápiz ✏️ y volvé a intentar.`,
+                confirmText: 'Entendido',
+                cancelText: ''
+            });
+            return;
+        }
         const emp = (localStorage.getItem('activeCompany') === 'lime') ? 'Lime' : 'Zero';
         const ok = await confirmDialog({
             icon: '🏬',
@@ -1359,7 +1374,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
-                    ${(item.item_type === 'almacen' && item.status === 'pending' && !item.warehouse_at) ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" title="Enviar al Almacén VTI" style="color:#a6e3a1;">🏬</button>` : ''}
+                    ${(item.item_type === 'almacen' && item.status === 'pending' && !item.warehouse_at) ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>
