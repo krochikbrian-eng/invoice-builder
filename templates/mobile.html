@@ -472,14 +472,12 @@
             <!-- Almacén -->
             <div class="card section-card">
                 <div class="section-title">🏬 Almacén</div>
-                <div class="section-desc">Los ítems de tipo Almacén tienen un botón para cargarlos en el Almacén externo. Depósito vacío = VTI.</div>
+                <div class="section-desc">Los ítems de tipo Almacén tienen un botón para cargarlos en el Almacén externo. Se cargan en el depósito VTI de la empresa seleccionada.</div>
                 <div class="flex gap-2 mb-2">
                     <input type="password" id="wh-key" placeholder="API key del Almacén" style="flex:1;"
                            onkeydown="if(event.key==='Enter')saveWarehouseCfg()">
                     <button onclick="saveWarehouseCfg()" class="btn-primary px-4 rounded-xl text-sm" style="min-width:90px;">Guardar</button>
                 </div>
-                <input type="text" id="wh-dep" placeholder="Depósito (por defecto VTI)" style="width:100%;"
-                       onkeydown="if(event.key==='Enter')saveWarehouseCfg()">
                 <p id="wh-status" class="text-xs mt-2" style="color:#585b70;"></p>
             </div>
 
@@ -945,8 +943,6 @@ async function loadWarehouseCfg() {
         const res = await fetch('/api/config/warehouse');
         const d = await res.json();
         const el = document.getElementById('wh-status');
-        const dep = document.getElementById('wh-dep');
-        if (dep) dep.value = d.deposito || '';
         if (!el) return;
         el.textContent = d.configured
             ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
@@ -956,8 +952,7 @@ async function loadWarehouseCfg() {
 }
 async function saveWarehouseCfg() {
     const key = document.getElementById('wh-key');
-    const dep = document.getElementById('wh-dep');
-    const body = { deposito: dep.value };
+    const body = {};
     if (key.value.trim()) body.api_key = key.value.trim();
     const res = await fetch('/api/config/warehouse', {
         method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
@@ -1115,10 +1110,24 @@ async function testSmtpConfig() {
     finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
 }
 
-// ─── Tabs ──────────────────────────────────────────────────────────────────
 // ─── Enviar al Almacén externo ──────────────────────────────────────
 async function sendToWarehouse(itemId, force) {
     const item = allItems.find(i => i.id === itemId);
+    if (!force) {
+        if (!item) return;
+        const emp = (localStorage.getItem('activeCompany') === 'lime') ? 'Lime' : 'Zero';
+        const ok = await confirmDialog({
+            icon: '🏬',
+            title: 'Enviar al Almacén',
+            message: `Se va a cargar en el Almacén VTI de ${emp}:\n\n`
+                   + `${item.title}\n`
+                   + `ASIN ${item.asin || '—'} · Tracking ${item.tracking || '—'}\n`
+                   + `${item.qty} unidad(es) · $${Number(item.price).toFixed(2)}\n\n`
+                   + `El ítem va a quedar en estado Enviado.`,
+            confirmText: 'Enviar al Almacén'
+        });
+        if (!ok) return;
+    }
     try {
         const res = await fetch(`/api/items/${itemId}/warehouse`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1127,8 +1136,8 @@ async function sendToWarehouse(itemId, force) {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
             toast(data.message || 'Enviado al Almacén', 'success');
-            if (item) item.warehouse_at = data.warehouse_at;
-            renderItems();
+            if (item) { item.warehouse_at = data.warehouse_at; item.status = data.status || 'sent'; }
+            loadItems();
             return;
         }
         if (data.already_sent) {
@@ -1181,6 +1190,7 @@ async function loadLastUpload() {
     } catch (e) {}
 }
 
+// ─── Tabs ──────────────────────────────────────────────────────────────────
 function showTab(name) {
     if (!document.getElementById(`tab-${name}`)) name = 'items';
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -1349,7 +1359,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
-                    ${item.item_type === 'almacen' ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" title="${item.warehouse_at ? 'Ya está en el Almacén' : 'Enviar al Almacén'}" style="color:${item.warehouse_at ? '#585b70' : '#a6e3a1'};">${item.warehouse_at ? '✓' : '🏬'}</button>` : ''}
+                    ${(item.item_type === 'almacen' && item.status === 'pending' && !item.warehouse_at) ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" title="Enviar al Almacén VTI" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>

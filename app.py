@@ -646,6 +646,8 @@ WAREHOUSE_ADD_URL = os.environ.get(
     'https://xxsdwlnvpbnhmjgniisy.supabase.co/functions/v1/api-warehouse-add')
 # Nombre de la empresa tal como lo espera el Almacén
 WAREHOUSE_COMPANY = {'zero': 'Zero', 'lime': 'Lime'}
+# Siempre se carga en el mismo depósito
+WAREHOUSE_DEPOSITO = 'VTI'
 
 def get_warehouse_api_key():
     """Clave del Almacén: del entorno (preferido) o del config. Nunca del código."""
@@ -2607,7 +2609,13 @@ def send_item_to_warehouse(item_id):
                                  f'Si lo volvés a mandar se suma la cantidad otra vez.',
                         'already_sent': True, 'warehouse_at': ya}), 409
 
-    company = (row['company'] if 'company' in cols else 'zero') or 'zero'
+    # La empresa es la que está seleccionada en el switch (y el ítem tiene que ser de ella)
+    company = get_company()
+    item_company = (row['company'] if 'company' in cols else 'zero') or 'zero'
+    if item_company != company:
+        conn.close()
+        return jsonify({'error': f'El ítem es de {COMPANY_UI_NAMES.get(item_company, item_company)} '
+                                 f'y tenés seleccionada {COMPANY_UI_NAMES.get(company, company)}.'}), 400
     fecha = (row['order_date'] or '').strip()
     m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', fecha)      # guardamos DD/MM/YYYY
     fecha_iso = f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else date.today().isoformat()
@@ -2620,10 +2628,8 @@ def send_item_to_warehouse(item_id):
         'cantidad': max(int(row['qty'] or 1), 1),
         'tracking': tracking,
         'fecha': fecha_iso,
+        'deposito': WAREHOUSE_DEPOSITO,
     }
-    deposito = str(data.get('deposito') or company_cfg(company).get('warehouse_deposito') or '').strip()
-    if deposito:
-        payload['deposito'] = deposito
 
     try:
         status, resp = _warehouse_add_call(payload, api_key)
@@ -2642,19 +2648,19 @@ def send_item_to_warehouse(item_id):
         return jsonify({'error': resp.get('error') or f'El Almacén devolvió un error ({status})',
                         'detail': resp}), 502
 
+    # OK del Almacén: lo dejamos marcado y el ítem pasa a Enviado
     ahora = datetime.now().isoformat(timespec='seconds')
-    conn.execute("UPDATE items SET warehouse_at = ? WHERE id = ?", (ahora, item_id))
+    conn.execute("UPDATE items SET warehouse_at = ?, status = 'sent' WHERE id = ?", (ahora, item_id))
     conn.commit()
     conn.close()
-    return jsonify({'message': f'Enviado al Almacén de {payload["empresa"]}',
-                    'warehouse_at': ahora, 'sent': payload, 'response': resp})
+    return jsonify({'message': f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}',
+                    'warehouse_at': ahora, 'status': 'sent', 'sent': payload, 'response': resp})
 
 @app.route('/api/config/warehouse', methods=['GET'])
 def get_warehouse_config():
-    company = get_company()
     return jsonify({'configured': bool(get_warehouse_api_key()),
                     'from_env': bool(os.environ.get('WAREHOUSE_API_KEY', '').strip()),
-                    'deposito': company_cfg(company).get('warehouse_deposito', ''),
+                    'deposito': WAREHOUSE_DEPOSITO,
                     'url': WAREHOUSE_ADD_URL})
 
 @app.route('/api/config/warehouse', methods=['PUT'])
@@ -2667,12 +2673,9 @@ def set_warehouse_config():
             cfg['warehouse_api_key'] = key
         else:
             cfg.pop('warehouse_api_key', None)
-    if 'deposito' in data:
-        dep = str(data.get('deposito', '')).strip()[:40]
-        cfg['companies'][get_company()]['warehouse_deposito'] = dep
     save_config(cfg)
     return jsonify({'configured': bool(get_warehouse_api_key()),
-                    'deposito': company_cfg(get_company()).get('warehouse_deposito', '')})
+                    'deposito': WAREHOUSE_DEPOSITO})
 
 @app.route('/api/config/tracking', methods=['GET'])
 def get_tracking_config():
