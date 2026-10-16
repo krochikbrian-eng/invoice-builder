@@ -1170,6 +1170,18 @@ async function sendToWarehouse(itemId, force) {
                     confirmText: 'Entendido',
                     cancelText: ''
                 });
+            } else if (data.reemplazado_por_devolucion) {
+                await confirmDialog({
+                    icon: '↩️',
+                    title: 'Cargado como devolución',
+                    message: `Este ítem tiene una devolución en ML, así que el Almacén lo guardó `
+                           + `con el tracking de devolución en vez del de envío.\n\n`
+                           + `Tracking guardado: ${data.tracking_guardado}\n`
+                           + `Tracking del envío: ${item ? (item.tracking || '—') : '—'}\n\n`
+                           + `El ítem queda en Enviado.`,
+                    confirmText: 'Entendido',
+                    cancelText: ''
+                });
             } else {
                 toast(data.message || 'Enviado al Almacén', 'success');
             }

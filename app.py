@@ -2689,15 +2689,26 @@ def send_item_to_warehouse(item_id):
     conn.execute("UPDATE items SET warehouse_at = ?, status = 'sent' WHERE id = ?", (ahora, item_id))
     conn.commit()
     conn.close()
+    # Si era una devolución, el Almacén guarda el tracking de devolución de ML
+    # en vez del de envío. Lo informamos para que se entienda qué quedó cargado.
+    tracking_guardado = str(resp.get('tracking_guardado') or '').strip()
+    por_devolucion = bool(resp.get('reemplazado_por_devolucion'))
+
     if ya_existia:
         msg = resp.get('error') or 'Esta unidad ya estaba cargada en el Almacén'
     else:
         msg = f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
         if asin_autocompletado:
             msg += f' (ASIN {asin} completado por tracking)'
+        if por_devolucion and tracking_guardado:
+            msg += f' · Es una devolución: quedó con el tracking de ML {tracking_guardado}'
+        elif tracking_guardado and tracking_guardado != tracking:
+            msg += f' · Quedó guardado con el tracking {tracking_guardado}'
     return jsonify({'message': msg, 'warehouse_at': ahora, 'status': 'sent',
                     'asin': asin, 'asin_autocompletado': asin_autocompletado,
                     'already_in_warehouse': ya_existia, 'existente': resp.get('existente'),
+                    'tracking_guardado': tracking_guardado or tracking,
+                    'reemplazado_por_devolucion': por_devolucion,
                     'sent': payload, 'response': resp})
 
 @app.route('/api/config/warehouse', methods=['GET'])
