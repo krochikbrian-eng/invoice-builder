@@ -221,6 +221,9 @@
         .status-pill { font-size: 0.7rem; padding: 3px 8px; border-radius: 9999px; font-weight: 600; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 50; display: none; align-items: center; justify-content: center; padding: 20px; }
         .modal-overlay.open { display: flex; }
+        /* Spinner propio: no dependemos de que el JIT de Tailwind genere animate-spin */
+        @keyframes wh-spin { to { transform: rotate(360deg); } }
+        .animate-spin { animation: wh-spin 0.7s linear infinite; }
     </style>
 </head>
 <body>
@@ -1148,6 +1151,13 @@ async function sendToWarehouse(itemId, force) {
         });
         if (!ok) return;
     }
+    const btn = document.getElementById(`wh-btn-${itemId}`);
+    const btnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '.6';
+        btn.innerHTML = '<span class="animate-spin" style="display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;"></span>';
+    }
     try {
         const res = await fetch(`/api/items/${itemId}/warehouse`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1207,6 +1217,13 @@ async function sendToWarehouse(itemId, force) {
         });
     } catch (err) {
         toast('Error: ' + err.message, 'error');
+    } finally {
+        const b = document.getElementById(`wh-btn-${itemId}`);
+        if (b) {
+            b.disabled = false;
+            b.style.opacity = '';
+            if (btnHtml) b.innerHTML = btnHtml;
+        }
     }
 }
 
@@ -1406,7 +1423,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
-                    ${(item.item_type === 'almacen' && item.status === 'pending') ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
+                    ${(item.item_type === 'almacen' && item.status === 'pending') ? `<button id="wh-btn-${item.id}" onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>
