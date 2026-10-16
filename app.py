@@ -161,7 +161,7 @@ def _migrate_config(cfg):
     if 'companies' not in cfg:
         flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
         flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
-        globals_kept = {k: cfg[k] for k in ('tracking_api_key',) if k in cfg}
+        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key') if k in cfg}
         cfg = {'companies': {'zero': flat}, **globals_kept}
     cfg.setdefault('companies', {})
     for comp in VALID_COMPANIES:
@@ -532,6 +532,12 @@ def init_db():
         conn.commit()
     except Exception:
         pass  # Column already exists
+    # Migration: fecha en que el ítem se mandó al Almacén externo (NULL = nunca)
+    try:
+        conn.execute("ALTER TABLE items ADD COLUMN warehouse_at TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
     # Clean items with invalid qty
     conn.execute("DELETE FROM items WHERE qty <= 0 AND status = 'pending'")
     conn.commit()
@@ -624,6 +630,33 @@ def _tracking_lookup_call(tracking, api_key, timeout=6):
     req = urllib.request.Request(
         TRACKING_LOOKUP_URL, data=body, method='POST',
         headers={'Content-Type': 'application/json', 'x-api-key': api_key,
+                 'Authorization': f'Bearer {api_key}'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, _json.loads(resp.read().decode() or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, _json.loads(e.read().decode() or '{}')
+        except Exception:
+            return e.code, {}
+
+# ─── Alta en el Almacén (API externa) ───────────────────────────────────────
+WAREHOUSE_ADD_URL = os.environ.get(
+    'WAREHOUSE_ADD_URL',
+    'https://xxsdwlnvpbnhmjgniisy.supabase.co/functions/v1/api-warehouse-add')
+# Nombre de la empresa tal como lo espera el Almacén
+WAREHOUSE_COMPANY = {'zero': 'Zero', 'lime': 'Lime'}
+
+def get_warehouse_api_key():
+    """Clave del Almacén: del entorno (preferido) o del config. Nunca del código."""
+    return (os.environ.get('WAREHOUSE_API_KEY', '')
+            or load_config().get('warehouse_api_key', '') or '').strip()
+
+def _warehouse_add_call(payload, api_key, timeout=10):
+    body = _json.dumps(payload).encode()
+    req = urllib.request.Request(
+        WAREHOUSE_ADD_URL, data=body, method='POST',
+        headers={'Content-Type': 'application/json',
                  'Authorization': f'Bearer {api_key}'})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -1533,6 +1566,7 @@ def get_items():
             'multi_item': order_counts.get(row['order_id'], 0) > 1,
             'item_type': (row['item_type'] if 'item_type' in row.keys() else 'comercial') or 'comercial',
             'weight': (row['weight'] if 'weight' in row.keys() else None),
+            'warehouse_at': (row['warehouse_at'] if 'warehouse_at' in row.keys() else None),
         })
 
     conn.close()
@@ -2531,6 +2565,114 @@ def tracking_lookup():
         })
     return jsonify({'found': True, 'tracking': data.get('tracking') or tracking,
                     'count': len(results), 'results': results})
+
+@app.route('/api/items/<int:item_id>/warehouse', methods=['POST'])
+def send_item_to_warehouse(item_id):
+    """Carga el ítem en el Almacén externo.
+
+    Solo para ítems de tipo Almacén. Se marca localmente la fecha de envío para
+    no mandarlo dos veces sin querer (la API suma cantidades si repetís el
+    mismo tracking, así que un doble click duplicaría stock).
+    """
+    data = request.get_json(silent=True) or {}
+    api_key = get_warehouse_api_key()
+    if not api_key:
+        return jsonify({'error': 'Falta configurar la clave del Almacén '
+                                 '(Configuración → Almacén).', 'not_configured': True}), 503
+
+    conn = get_db()
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        conn.close()
+        return jsonify({'error': 'Ítem no encontrado'}), 404
+
+    cols = row.keys()
+    if (row['item_type'] if 'item_type' in cols else '') != 'almacen':
+        conn.close()
+        return jsonify({'error': 'Solo se pueden mandar al Almacén los ítems de tipo Almacén'}), 400
+
+    asin = (row['asin'] or '').strip()
+    tracking = (row['tracking'] if 'tracking' in cols else '') or ''
+    tracking = tracking.strip()
+    faltan = [n for n, v in (('ASIN', asin), ('tracking', tracking)) if not v]
+    if faltan:
+        conn.close()
+        return jsonify({'error': f'El ítem no tiene {" ni ".join(faltan)}; '
+                                 f'el Almacén los necesita. Completalos y volvé a intentar.'}), 400
+
+    ya = (row['warehouse_at'] if 'warehouse_at' in cols else None)
+    if ya and not data.get('force'):
+        conn.close()
+        return jsonify({'error': f'Este ítem ya se mandó al Almacén ({ya}). '
+                                 f'Si lo volvés a mandar se suma la cantidad otra vez.',
+                        'already_sent': True, 'warehouse_at': ya}), 409
+
+    company = (row['company'] if 'company' in cols else 'zero') or 'zero'
+    fecha = (row['order_date'] or '').strip()
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', fecha)      # guardamos DD/MM/YYYY
+    fecha_iso = f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else date.today().isoformat()
+
+    payload = {
+        'empresa': WAREHOUSE_COMPANY.get(company, 'Zero'),
+        'asin': asin,
+        'titulo': (row['title'] or '').strip(),
+        'precio': round(float(row['price'] or 0), 2),
+        'cantidad': max(int(row['qty'] or 1), 1),
+        'tracking': tracking,
+        'fecha': fecha_iso,
+    }
+    deposito = str(data.get('deposito') or company_cfg(company).get('warehouse_deposito') or '').strip()
+    if deposito:
+        payload['deposito'] = deposito
+
+    try:
+        status, resp = _warehouse_add_call(payload, api_key)
+    except Exception as e:
+        conn.close()
+        app.logger.warning('warehouse-add falló para item %s: %s', item_id, e)
+        return jsonify({'error': 'No se pudo conectar con el Almacén'}), 502
+    if not isinstance(resp, dict):
+        resp = {}
+
+    if status in (401, 403):
+        conn.close()
+        return jsonify({'error': 'El Almacén rechazó la clave (no autorizado)'}), 502
+    if status >= 400 or resp.get('success') is False or resp.get('error'):
+        conn.close()
+        return jsonify({'error': resp.get('error') or f'El Almacén devolvió un error ({status})',
+                        'detail': resp}), 502
+
+    ahora = datetime.now().isoformat(timespec='seconds')
+    conn.execute("UPDATE items SET warehouse_at = ? WHERE id = ?", (ahora, item_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Enviado al Almacén de {payload["empresa"]}',
+                    'warehouse_at': ahora, 'sent': payload, 'response': resp})
+
+@app.route('/api/config/warehouse', methods=['GET'])
+def get_warehouse_config():
+    company = get_company()
+    return jsonify({'configured': bool(get_warehouse_api_key()),
+                    'from_env': bool(os.environ.get('WAREHOUSE_API_KEY', '').strip()),
+                    'deposito': company_cfg(company).get('warehouse_deposito', ''),
+                    'url': WAREHOUSE_ADD_URL})
+
+@app.route('/api/config/warehouse', methods=['PUT'])
+def set_warehouse_config():
+    data = request.get_json() or {}
+    cfg = load_config()
+    if 'api_key' in data:
+        key = str(data.get('api_key', '')).strip()
+        if key:
+            cfg['warehouse_api_key'] = key
+        else:
+            cfg.pop('warehouse_api_key', None)
+    if 'deposito' in data:
+        dep = str(data.get('deposito', '')).strip()[:40]
+        cfg['companies'][get_company()]['warehouse_deposito'] = dep
+    save_config(cfg)
+    return jsonify({'configured': bool(get_warehouse_api_key()),
+                    'deposito': company_cfg(get_company()).get('warehouse_deposito', '')})
 
 @app.route('/api/config/tracking', methods=['GET'])
 def get_tracking_config():

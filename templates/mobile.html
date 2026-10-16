@@ -469,6 +469,20 @@
                 <p id="trk-status" class="text-xs mt-2" style="color:#585b70;"></p>
             </div>
 
+            <!-- Almacén -->
+            <div class="card section-card">
+                <div class="section-title">🏬 Almacén</div>
+                <div class="section-desc">Los ítems de tipo Almacén tienen un botón para cargarlos en el Almacén externo. Depósito vacío = VTI.</div>
+                <div class="flex gap-2 mb-2">
+                    <input type="password" id="wh-key" placeholder="API key del Almacén" style="flex:1;"
+                           onkeydown="if(event.key==='Enter')saveWarehouseCfg()">
+                    <button onclick="saveWarehouseCfg()" class="btn-primary px-4 rounded-xl text-sm" style="min-width:90px;">Guardar</button>
+                </div>
+                <input type="text" id="wh-dep" placeholder="Depósito (por defecto VTI)" style="width:100%;"
+                       onkeydown="if(event.key==='Enter')saveWarehouseCfg()">
+                <p id="wh-status" class="text-xs mt-2" style="color:#585b70;"></p>
+            </div>
+
             <!-- Invoice Counter -->
             <div class="card section-card">
                 <div class="section-title">Contador de Invoice</div>
@@ -925,6 +939,36 @@ async function saveTrackingCfg() {
 }
 
 
+// ─── Config del Almacén ─────────────────────────────────────────────
+async function loadWarehouseCfg() {
+    try {
+        const res = await fetch('/api/config/warehouse');
+        const d = await res.json();
+        const el = document.getElementById('wh-status');
+        const dep = document.getElementById('wh-dep');
+        if (dep) dep.value = d.deposito || '';
+        if (!el) return;
+        el.textContent = d.configured
+            ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
+            : 'API key: sin configurar — el botón "Enviar a Almacén" no va a funcionar';
+        el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
+    } catch (e) {}
+}
+async function saveWarehouseCfg() {
+    const key = document.getElementById('wh-key');
+    const dep = document.getElementById('wh-dep');
+    const body = { deposito: dep.value };
+    if (key.value.trim()) body.api_key = key.value.trim();
+    const res = await fetch('/api/config/warehouse', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(d.error || 'Error al guardar', 'error'); return; }
+    key.value = '';
+    toast('Configuración del Almacén guardada', 'success');
+    loadWarehouseCfg();
+}
+
 // ─── Invoice Counter ───────────────────────────────────────────────────────
 async function loadInvoiceCounter() {
     try {
@@ -1072,6 +1116,44 @@ async function testSmtpConfig() {
 }
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
+// ─── Enviar al Almacén externo ──────────────────────────────────────
+async function sendToWarehouse(itemId, force) {
+    const item = allItems.find(i => i.id === itemId);
+    try {
+        const res = await fetch(`/api/items/${itemId}/warehouse`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(force ? { force: true } : {})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            toast(data.message || 'Enviado al Almacén', 'success');
+            if (item) item.warehouse_at = data.warehouse_at;
+            renderItems();
+            return;
+        }
+        if (data.already_sent) {
+            const ok = await confirmDialog({
+                icon: '🏬',
+                title: 'Ya está en el Almacén',
+                message: `${data.error}\n\n¿Mandarlo igual?`,
+                confirmText: 'Mandar igual',
+                confirmClass: 'btn-danger'
+            });
+            if (ok) sendToWarehouse(itemId, true);
+            return;
+        }
+        confirmDialog({
+            icon: '⚠️',
+            title: 'No se pudo enviar al Almacén',
+            message: data.error || 'Error desconocido',
+            confirmText: 'Entendido',
+            cancelText: ''
+        });
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    }
+}
+
 // ─── Última subida ──────────────────────────────────────────────────
 function fmtAgo(iso) {
     const d = new Date(iso);
@@ -1111,7 +1193,7 @@ function showTab(name) {
     if (name === 'items') loadItems();
     if (name === 'history') loadHistory();
     if (name === 'box') updateNextInvoice();
-    if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+    if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadWarehouseCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
     localStorage.setItem('lastTab', name);
 }
 
@@ -1267,6 +1349,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
+                    ${item.item_type === 'almacen' ? `<button onclick="sendToWarehouse(${item.id})" class="remove-btn" title="${item.warehouse_at ? 'Ya está en el Almacén' : 'Enviar al Almacén'}" style="color:${item.warehouse_at ? '#585b70' : '#a6e3a1'};">${item.warehouse_at ? '✓' : '🏬'}</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>
             </div>
