@@ -476,10 +476,10 @@
 
             <!-- Almacén -->
             <div class="card section-card">
-                <div class="section-title">🏬 Almacén</div>
-                <div class="section-desc">Los ítems de tipo Almacén tienen un botón para cargarlos en el Almacén externo. Se cargan en el depósito VTI de la empresa seleccionada.</div>
+                <div class="section-title">🏬 MeliOS (Almacén)</div>
+                <div class="section-desc">Los ítems de tipo Almacén tienen un botón para cargarlos en MeliOS. Se cargan en el depósito VTI de la empresa seleccionada.</div>
                 <div class="flex gap-2 mb-2">
-                    <input type="password" id="wh-key" placeholder="API key del Almacén" style="flex:1;"
+                    <input type="password" id="wh-key" placeholder="API key de MeliOS" style="flex:1;"
                            onkeydown="if(event.key==='Enter')saveWarehouseCfg()">
                     <button onclick="saveWarehouseCfg()" class="btn-primary px-4 rounded-xl text-sm" style="min-width:90px;">Guardar</button>
                 </div>
@@ -955,7 +955,7 @@ async function loadWarehouseCfg() {
         if (!el) return;
         el.textContent = d.configured
             ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
-            : 'API key: sin configurar — el botón "Enviar a Almacén" no va a funcionar';
+            : 'API key: sin configurar — el botón "Enviar a MeliOS" no va a funcionar';
         el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
     } catch (e) {}
 }
@@ -969,7 +969,7 @@ async function saveWarehouseCfg() {
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { toast(d.error || 'Error al guardar', 'error'); return; }
     key.value = '';
-    toast('Configuración del Almacén guardada', 'success');
+    toast('Configuración de MeliOS guardada', 'success');
     loadWarehouseCfg();
 }
 
@@ -1129,7 +1129,7 @@ async function sendToWarehouse(itemId, force) {
             await confirmDialog({
                 icon: '⚠️',
                 title: 'Falta el tracking',
-                message: `A este ítem le falta el tracking, y el Almacén lo exige para poder cargarlo.\n\n`
+                message: `A este ítem le falta el tracking, y MeliOS lo exige para poder cargarlo.\n\n`
                        + `${item.title}\n\n`
                        + `Completalo con el lápiz ✏️ y volvé a intentar.`,
                 confirmText: 'Entendido',
@@ -1141,13 +1141,13 @@ async function sendToWarehouse(itemId, force) {
         const asinTxt = (item.asin || '').trim() || 'se busca por tracking';
         const ok = await confirmDialog({
             icon: '🏬',
-            title: 'Enviar al Almacén',
-            message: `Se va a cargar en el Almacén VTI de ${emp}:\n\n`
+            title: 'Enviar a MeliOS',
+            message: `Se va a cargar en MeliOS, depósito VTI de ${emp}:\n\n`
                    + `${item.title}\n`
                    + `ASIN ${asinTxt} · Tracking ${item.tracking}\n`
                    + `${item.qty} unidad(es) · $${Number(item.price).toFixed(2)}\n\n`
                    + `El ítem va a quedar en estado Enviado.`,
-            confirmText: 'Enviar al Almacén'
+            confirmText: 'Enviar a MeliOS'
         });
         if (!ok) return;
     }
@@ -1174,7 +1174,7 @@ async function sendToWarehouse(itemId, force) {
                              e.cantidad != null && `${e.cantidad} unidad(es)`].filter(Boolean).join(' · ');
                 await confirmDialog({
                     icon: 'ℹ️',
-                    title: 'Ya estaba en el Almacén',
+                    title: 'Ya estaba cargado en MeliOS',
                     message: `${data.message}` + (det ? `\n\n${det}` : '')
                            + `\n\nNo se cargó de nuevo. El ítem igual queda en Enviado.`,
                     confirmText: 'Entendido',
@@ -1184,7 +1184,7 @@ async function sendToWarehouse(itemId, force) {
                 await confirmDialog({
                     icon: '↩️',
                     title: 'Cargado como devolución',
-                    message: `Este ítem tiene una devolución en ML, así que el Almacén lo guardó `
+                    message: `Este ítem tiene una devolución en ML, así que MeliOS lo guardó `
                            + `con el tracking de devolución en vez del de envío.\n\n`
                            + `Tracking guardado: ${data.tracking_guardado}\n`
                            + `Tracking del envío: ${item ? (item.tracking || '—') : '—'}\n\n`
@@ -1193,14 +1193,14 @@ async function sendToWarehouse(itemId, force) {
                     cancelText: ''
                 });
             } else {
-                toast(data.message || 'Enviado al Almacén', 'success');
+                toast(data.message || 'Enviado a MeliOS', 'success');
             }
             return;
         }
         if (data.already_sent) {
             const ok = await confirmDialog({
                 icon: '🏬',
-                title: 'Ya está en el Almacén',
+                title: 'Ya se mandó a MeliOS',
                 message: `${data.error}\n\n¿Mandarlo igual?`,
                 confirmText: 'Mandar igual',
                 confirmClass: 'btn-danger'
@@ -1210,7 +1210,7 @@ async function sendToWarehouse(itemId, force) {
         }
         confirmDialog({
             icon: '⚠️',
-            title: 'No se pudo enviar al Almacén',
+            title: 'No se pudo enviar a MeliOS',
             message: data.error || 'Error desconocido',
             confirmText: 'Entendido',
             cancelText: ''

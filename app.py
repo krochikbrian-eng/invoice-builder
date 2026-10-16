@@ -2596,8 +2596,8 @@ def send_item_to_warehouse(item_id):
     data = request.get_json(silent=True) or {}
     api_key = get_warehouse_api_key()
     if not api_key:
-        return jsonify({'error': 'Falta configurar la clave del Almacén '
-                                 '(Configuración → Almacén).', 'not_configured': True}), 503
+        return jsonify({'error': 'Falta configurar la clave de MeliOS '
+                                 '(Configuración → MeliOS).', 'not_configured': True}), 503
 
     conn = get_db()
     row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
@@ -2608,14 +2608,14 @@ def send_item_to_warehouse(item_id):
     cols = row.keys()
     if (row['item_type'] if 'item_type' in cols else '') != 'almacen':
         conn.close()
-        return jsonify({'error': 'Solo se pueden mandar al Almacén los ítems de tipo Almacén'}), 400
+        return jsonify({'error': 'Solo se pueden mandar a MeliOS los ítems de tipo Almacén'}), 400
 
     asin = (row['asin'] or '').strip()
     tracking = (row['tracking'] if 'tracking' in cols else '') or ''
     tracking = tracking.strip()
     if not tracking:
         conn.close()
-        return jsonify({'error': 'El ítem no tiene tracking; el Almacén lo necesita. '
+        return jsonify({'error': 'El ítem no tiene tracking; MeliOS lo necesita. '
                                  'Completalo y volvé a intentar.'}), 400
 
     # Si falta el ASIN lo buscamos por tracking antes de dar error: si la otra API
@@ -2629,12 +2629,12 @@ def send_item_to_warehouse(item_id):
     if not asin:
         conn.close()
         return jsonify({'error': 'El ítem no tiene ASIN y tampoco se encontró buscándolo por '
-                                 'tracking; el Almacén lo necesita. Completalo y volvé a intentar.'}), 400
+                                 'tracking; MeliOS lo necesita. Completalo y volvé a intentar.'}), 400
 
     ya = (row['warehouse_at'] if 'warehouse_at' in cols else None)
     if ya and not data.get('force'):
         conn.close()
-        return jsonify({'error': f'Este ítem ya se mandó al Almacén ({ya}). '
+        return jsonify({'error': f'Este ítem ya se mandó a MeliOS ({ya}). '
                                  f'Si lo volvés a mandar se suma la cantidad otra vez.',
                         'already_sent': True, 'warehouse_at': ya}), 409
 
@@ -2665,13 +2665,13 @@ def send_item_to_warehouse(item_id):
     except Exception as e:
         conn.close()
         app.logger.warning('warehouse-add falló para item %s: %s', item_id, e)
-        return jsonify({'error': 'No se pudo conectar con el Almacén'}), 502
+        return jsonify({'error': 'No se pudo conectar con MeliOS'}), 502
     if not isinstance(resp, dict):
         resp = {}
 
     if status in (401, 403):
         conn.close()
-        return jsonify({'error': 'El Almacén rechazó la clave (no autorizado)'}), 502
+        return jsonify({'error': 'MeliOS rechazó la clave (no autorizado)'}), 502
 
     # "Ya estaba cargado" no es un error: el ítem efectivamente está en el Almacén,
     # así que avisamos y lo pasamos a Enviado igual.
@@ -2681,7 +2681,7 @@ def send_item_to_warehouse(item_id):
 
     if not ya_existia and (status >= 400 or resp.get('success') is False or resp.get('error')):
         conn.close()
-        return jsonify({'error': resp.get('error') or f'El Almacén devolvió un error ({status})',
+        return jsonify({'error': resp.get('error') or f'MeliOS devolvió un error ({status})',
                         'detail': resp}), 502
 
     # OK del Almacén: lo dejamos marcado y el ítem pasa a Enviado
@@ -2695,9 +2695,9 @@ def send_item_to_warehouse(item_id):
     por_devolucion = bool(resp.get('reemplazado_por_devolucion'))
 
     if ya_existia:
-        msg = resp.get('error') or 'Esta unidad ya estaba cargada en el Almacén'
+        msg = resp.get('error') or 'Esta unidad ya estaba cargada en MeliOS'
     else:
-        msg = f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
+        msg = f'Enviado a MeliOS · depósito {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
         if asin_autocompletado:
             msg += f' (ASIN {asin} completado por tracking)'
         if por_devolucion and tracking_guardado:
