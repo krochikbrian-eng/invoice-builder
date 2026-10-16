@@ -2672,7 +2672,14 @@ def send_item_to_warehouse(item_id):
     if status in (401, 403):
         conn.close()
         return jsonify({'error': 'El Almacén rechazó la clave (no autorizado)'}), 502
-    if status >= 400 or resp.get('success') is False or resp.get('error'):
+
+    # "Ya estaba cargado" no es un error: el ítem efectivamente está en el Almacén,
+    # así que avisamos y lo pasamos a Enviado igual.
+    motivo = str(resp.get('motivo') or '')
+    ya_existia = bool(resp.get('existente')) or bool(
+        re.search(r'ya_cargad|ya_exist|duplicad|ya_ingresad', motivo, re.I))
+
+    if not ya_existia and (status >= 400 or resp.get('success') is False or resp.get('error')):
         conn.close()
         return jsonify({'error': resp.get('error') or f'El Almacén devolvió un error ({status})',
                         'detail': resp}), 502
@@ -2682,11 +2689,15 @@ def send_item_to_warehouse(item_id):
     conn.execute("UPDATE items SET warehouse_at = ?, status = 'sent' WHERE id = ?", (ahora, item_id))
     conn.commit()
     conn.close()
-    msg = f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
-    if asin_autocompletado:
-        msg += f' (ASIN {asin} completado por tracking)'
+    if ya_existia:
+        msg = resp.get('error') or 'Esta unidad ya estaba cargada en el Almacén'
+    else:
+        msg = f'Enviado al Almacén {WAREHOUSE_DEPOSITO} de {payload["empresa"]}'
+        if asin_autocompletado:
+            msg += f' (ASIN {asin} completado por tracking)'
     return jsonify({'message': msg, 'warehouse_at': ahora, 'status': 'sent',
                     'asin': asin, 'asin_autocompletado': asin_autocompletado,
+                    'already_in_warehouse': ya_existia, 'existente': resp.get('existente'),
                     'sent': payload, 'response': resp})
 
 @app.route('/api/config/warehouse', methods=['GET'])

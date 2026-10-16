@@ -1155,9 +1155,24 @@ async function sendToWarehouse(itemId, force) {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-            toast(data.message || 'Enviado al Almacén', 'success');
             if (item) { item.warehouse_at = data.warehouse_at; item.status = data.status || 'sent'; if (data.asin) item.asin = data.asin; }
             loadItems();
+            if (data.already_in_warehouse) {
+                const e = data.existente || {};
+                const det = [e.deposito && `depósito ${e.deposito}`,
+                             e.tracking && `tracking ${e.tracking}`,
+                             e.cantidad != null && `${e.cantidad} unidad(es)`].filter(Boolean).join(' · ');
+                await confirmDialog({
+                    icon: 'ℹ️',
+                    title: 'Ya estaba en el Almacén',
+                    message: `${data.message}` + (det ? `\n\n${det}` : '')
+                           + `\n\nNo se cargó de nuevo. El ítem igual queda en Enviado.`,
+                    confirmText: 'Entendido',
+                    cancelText: ''
+                });
+            } else {
+                toast(data.message || 'Enviado al Almacén', 'success');
+            }
             return;
         }
         if (data.already_sent) {
