@@ -1147,6 +1147,53 @@
         } catch (e) { out.textContent = 'Error: ' + e.message; }
     }
 
+    // ─── Dividir un ítem en dos ─────────────────────────────────────────
+    async function splitItem(itemId) {
+        const item = allItems.find(i => i.id === itemId);
+        if (!item) return;
+        const qty = Number(item.qty) || 0;
+        if (qty < 2) {
+            await confirmDialog({
+                icon: '✂️', title: 'No se puede dividir',
+                message: 'Este ítem tiene una sola unidad.',
+                confirmText: 'Entendido', cancelText: ''
+            });
+            return;
+        }
+        const nuevo = Math.floor(qty / 2);
+        const original = qty - nuevo;
+        const ok = await confirmDialog({
+            icon: '✂️',
+            title: 'Dividir el ítem',
+            message: `${item.title}\n\n`
+                   + `Se va a separar en dos ítems iguales, con el mismo tracking:\n`
+                   + `· ${original} unidad(es)\n`
+                   + `· ${nuevo} unidad(es)\n\n`
+                   + `Todo lo demás queda igual (precio, tipo, estado y factura).`,
+            confirmText: 'Dividir'
+        });
+        if (!ok) return;
+        try {
+            const res = await fetch(`/api/items/${itemId}/split`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                toast(data.message || 'Ítem dividido', 'success');
+                await loadItems();
+                flashItemCard(data.nuevo_id);
+            } else {
+                confirmDialog({
+                    icon: '⚠️', title: 'No se pudo dividir',
+                    message: data.error || 'Error desconocido',
+                    confirmText: 'Entendido', cancelText: ''
+                });
+            }
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        }
+    }
+
     // ─── Enviar al Almacén externo ──────────────────────────────────────
     async function sendToWarehouse(itemId, force) {
         const item = allItems.find(i => i.id === itemId);
@@ -1580,6 +1627,10 @@
                             <button onclick="event.stopPropagation(); openEditItemModal(${item.id})" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Editar título y tracking">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                             </button>
+                            ${item.qty > 1 ? `
+                            <button onclick="event.stopPropagation(); splitItem(${item.id})" class="text-gray-400 hover:text-purple-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Dividir en dos">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+                            </button>` : ''}
                             ${(item.item_type === 'almacen' && item.status === 'pending') ? `
                             <button id="wh-btn-${item.id}" onclick="event.stopPropagation(); sendToWarehouse(${item.id})"
                                     class="btn-ghost px-2 py-1 rounded text-xs whitespace-nowrap">

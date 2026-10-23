@@ -1119,6 +1119,52 @@ async function testSmtpConfig() {
     finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
 }
 
+// ─── Dividir un ítem en dos ─────────────────────────────────────────
+async function splitItem(itemId) {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) return;
+    const qty = Number(item.qty) || 0;
+    if (qty < 2) {
+        await confirmDialog({
+            icon: '✂️', title: 'No se puede dividir',
+            message: 'Este ítem tiene una sola unidad.',
+            confirmText: 'Entendido', cancelText: ''
+        });
+        return;
+    }
+    const nuevo = Math.floor(qty / 2);
+    const original = qty - nuevo;
+    const ok = await confirmDialog({
+        icon: '✂️',
+        title: 'Dividir el ítem',
+        message: `${item.title}\n\n`
+               + `Se va a separar en dos ítems iguales, con el mismo tracking:\n`
+               + `· ${original} unidad(es)\n`
+               + `· ${nuevo} unidad(es)\n\n`
+               + `Todo lo demás queda igual (precio, tipo, estado y factura).`,
+        confirmText: 'Dividir'
+    });
+    if (!ok) return;
+    try {
+        const res = await fetch(`/api/items/${itemId}/split`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            toast(data.message || 'Ítem dividido', 'success');
+            await loadItems();
+        } else {
+            confirmDialog({
+                icon: '⚠️', title: 'No se pudo dividir',
+                message: data.error || 'Error desconocido',
+                confirmText: 'Entendido', cancelText: ''
+            });
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    }
+}
+
 // ─── Enviar al Almacén externo ──────────────────────────────────────
 async function sendToWarehouse(itemId, force) {
     const item = allItems.find(i => i.id === itemId);
@@ -1423,6 +1469,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
+                    ${item.qty > 1 ? `<button onclick="splitItem(${item.id})" class="remove-btn" title="Dividir en dos" style="color:#cba6f7;">✂️</button>` : ''}
                     ${(item.item_type === 'almacen' && item.status === 'pending') ? `<button id="wh-btn-${item.id}" onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>
                 </div>

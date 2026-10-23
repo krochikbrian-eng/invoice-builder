@@ -2585,6 +2585,70 @@ def tracking_lookup():
     return jsonify({'found': True, 'tracking': data.get('tracking') or tracking,
                     'count': len(results), 'results': results})
 
+@app.route('/api/items/<int:item_id>/split', methods=['POST'])
+def split_item(item_id):
+    """Parte el ítem en dos, repartiendo las unidades por la mitad.
+
+    Las dos partes quedan idénticas (mismo tracking, ASIN, precio, tipo, estado
+    y factura): solo cambia la cantidad. Si la cantidad es impar, la parte
+    original se queda con la unidad de más.
+    """
+    conn = get_db()
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        conn.close()
+        return jsonify({'error': 'Ítem no encontrado'}), 404
+
+    try:
+        qty_total = int(row['qty'])
+    except (TypeError, ValueError):
+        qty_total = 0
+    if qty_total < 2:
+        conn.close()
+        return jsonify({'error': 'El ítem tiene una sola unidad: no se puede dividir.'}), 400
+
+    data = request.get_json(silent=True) or {}
+    qty_nuevo = data.get('qty')
+    if qty_nuevo is None:
+        qty_nuevo = qty_total // 2                 # la mitad para la parte nueva
+    else:
+        try:
+            qty_nuevo = int(qty_nuevo)
+        except (TypeError, ValueError):
+            conn.close()
+            return jsonify({'error': 'Cantidad inválida'}), 400
+    if not (1 <= qty_nuevo < qty_total):
+        conn.close()
+        return jsonify({'error': f'La cantidad a separar tiene que estar entre 1 y {qty_total - 1}.'}), 400
+    qty_original = qty_total - qty_nuevo
+
+    cols = row.keys()
+    def val(name, default=None):
+        return row[name] if name in cols else default
+    precio = row['price'] or 0
+
+    conn.execute("UPDATE items SET qty = ?, total_neto = ? WHERE id = ?",
+                 (qty_original, round(precio * qty_original, 2), item_id))
+    cur = conn.execute("""
+        INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status,
+                           total_neto, tracking, status, company, item_type, weight, invoice_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (val('order_id', ''), val('asin', ''), val('title', ''), precio, qty_nuevo,
+          val('po'), val('order_date', ''), val('order_status', ''),
+          round(precio * qty_nuevo, 2), val('tracking', ''), val('status', 'pending'),
+          val('company', 'zero'), val('item_type', 'comercial') or 'comercial',
+          val('weight'), val('invoice_id')))
+    nuevo_id = cur.lastrowid
+
+    # El monto de la factura no cambia (misma cantidad total), pero ahora hay una fila más
+    if val('invoice_id'):
+        adjust_invoice_total(conn, val('invoice_id'), 0, 1)
+
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Dividido en {qty_original} + {qty_nuevo} unidades',
+                    'qty_original': qty_original, 'qty_nuevo': qty_nuevo, 'nuevo_id': nuevo_id})
+
 @app.route('/api/items/<int:item_id>/warehouse', methods=['POST'])
 def send_item_to_warehouse(item_id):
     """Carga el ítem en el Almacén externo.
