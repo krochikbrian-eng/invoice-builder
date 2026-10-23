@@ -532,6 +532,17 @@ def init_db():
         conn.commit()
     except Exception:
         pass  # Column already exists
+    # ASINs que ya consultamos y no tienen peso cargado en MeliOS: así la
+    # próxima pasada no los vuelve a consultar uno por uno.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS asin_sin_peso (
+            company TEXT NOT NULL,
+            asin TEXT NOT NULL,
+            checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (company, asin)
+        )
+    """)
+    conn.commit()
     # Migration: fecha en que el ítem se mandó al Almacén externo (NULL = nunca)
     try:
         conn.execute("ALTER TABLE items ADD COLUMN warehouse_at TEXT")
@@ -665,6 +676,63 @@ def _asin_por_tracking(tracking):
             if isinstance(r, dict) and (r.get('asin') or '').strip():
                 return (r.get('asin') or '').strip()
     return ''
+
+# ─── Datos de producto por ASIN (API externa) ───────────────────────────────
+# Devuelve, entre otras cosas, el peso del bulto. Se usa para completar el peso
+# de los ítems, porque el reporte de Amazon no trae esa columna.
+PRODUCT_DATA_URL = os.environ.get(
+    'PRODUCT_DATA_URL',
+    'https://xxsdwlnvpbnhmjgniisy.supabase.co/functions/v1/api-product-data')
+ML_ACCOUNT_IDS = {
+    'zero': os.environ.get('ML_ACCOUNT_ID_ZERO', '33d8aef7-c56c-46c4-8911-b7c6d748ccc5'),
+    'lime': os.environ.get('ML_ACCOUNT_ID_LIME', 'c5f41c46-af7e-4e1f-8b13-87814faa997e'),
+}
+# Solo usamos el peso del bulto que se publica. 'amazon_weight' viene sucio
+# (se vieron valores como '9G') y no es confiable para cargarlo automáticamente.
+WEIGHT_FIELDS = ('ai_package_weight',)
+
+def _product_data_call(asin, company, timeout=10):
+    """Pide los datos de un ASIN en la cuenta de esa empresa. (status, dict)."""
+    payload = {'asin': asin, 'mlAccountId': ML_ACCOUNT_IDS.get(company, '')}
+    req = urllib.request.Request(
+        PRODUCT_DATA_URL, data=_json.dumps(payload).encode(), method='POST',
+        headers={'Content-Type': 'application/json'})
+    key = os.environ.get('PRODUCT_DATA_API_KEY', '') or load_config().get('product_data_api_key', '')
+    if key:
+        req.add_header('Authorization', f'Bearer {key}')
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, _json.loads(resp.read().decode() or '{}')
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, _json.loads(e.read().decode() or '{}')
+        except Exception:
+            return e.code, {}
+
+def peso_por_asin(asin, company):
+    """Peso en kg del producto, o None si no se pudo averiguar."""
+    asin = (asin or '').strip()
+    if not asin or company not in ML_ACCOUNT_IDS:
+        return None
+    try:
+        status, data = _product_data_call(asin, company)
+    except Exception as e:
+        app.logger.warning('product-data falló para %s: %s', asin, e)
+        return None
+    if status >= 400 or not isinstance(data, dict):
+        return None
+    # La respuesta puede venir plana o anidada en 'product'/'data'
+    fuentes = [data]
+    for k in ('product', 'data', 'result'):
+        if isinstance(data.get(k), dict):
+            fuentes.append(data[k])
+    for f in fuentes:
+        for campo in WEIGHT_FIELDS:
+            if campo in f and f[campo] not in (None, '', 0):
+                kg = parse_peso_kg(f[campo])
+                if kg:
+                    return kg
+    return None
 
 def get_warehouse_api_key():
     """Clave del Almacén: del entorno (preferido) o del config. Nunca del código."""
@@ -2584,6 +2652,69 @@ def tracking_lookup():
         })
     return jsonify({'found': True, 'tracking': data.get('tracking') or tracking,
                     'count': len(results), 'results': results})
+
+@app.route('/api/items/weights/pending')
+def weights_pending():
+    """Cuántos ítems de la empresa activa están sin peso y tienen ASIN."""
+    company = get_company()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT COUNT(*) c, COUNT(DISTINCT asin) a FROM items "
+        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?)",
+        (company, company)).fetchone()
+    sin = conn.execute("SELECT COUNT(*) c FROM asin_sin_peso WHERE company = ?",
+                       (company,)).fetchone()['c']
+    conn.close()
+    return jsonify({'items': row['c'], 'asins': row['a'], 'asins_sin_dato': sin})
+
+@app.route('/api/items/weights/fill', methods=['POST'])
+def fill_weights():
+    """Completa el peso de los ítems consultando el ASIN en la API de productos.
+
+    Trabaja de a tandas (una consulta por ASIN distinto, no por ítem) para que
+    el pedido no se eternice: el front lo llama varias veces hasta terminar.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        limit = max(1, min(int(data.get('limit', 10)), 40))
+    except (TypeError, ValueError):
+        limit = 10
+    company = get_company()
+
+    conn = get_db()
+    if data.get('reintentar'):      # volver a probar los que habían fallado
+        conn.execute("DELETE FROM asin_sin_peso WHERE company = ?", (company,))
+        conn.commit()
+
+    asins = [r['asin'] for r in conn.execute(
+        "SELECT DISTINCT asin FROM items "
+        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?) "
+        "ORDER BY asin LIMIT ?", (company, company, limit)).fetchall()]
+
+    completados, sin_dato = 0, 0
+    for asin in asins:
+        kg = peso_por_asin(asin, company)
+        if kg is None:
+            sin_dato += 1
+            conn.execute("INSERT OR REPLACE INTO asin_sin_peso (company, asin) VALUES (?, ?)",
+                         (company, asin))
+            continue
+        cur = conn.execute(
+            "UPDATE items SET weight = ? WHERE company = ? AND asin = ? AND weight IS NULL",
+            (kg, company, asin))
+        completados += cur.rowcount
+    conn.commit()
+
+    restantes = conn.execute(
+        "SELECT COUNT(DISTINCT asin) c FROM items "
+        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?)",
+        (company, company)).fetchone()['c']
+    conn.close()
+    return jsonify({'asins_consultados': len(asins), 'items_completados': completados,
+                    'asins_sin_dato': sin_dato, 'asins_restantes': restantes})
 
 @app.route('/api/items/<int:item_id>/split', methods=['POST'])
 def split_item(item_id):

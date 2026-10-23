@@ -390,6 +390,7 @@
             <div class="flex items-center justify-between mb-3 gap-2">
                 <h2 class="text-base font-bold">📦 Ítems <span id="pending-count" style="color:#89b4fa;"></span></h2>
                 <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0">➕ Ítem manual</button>
+                <button onclick="fillWeights()" id="fill-weights-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0" style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#cdd6f4;">⚖️ Pesos</button>
             </div>
 
             <!-- Search + filter -->
@@ -1117,6 +1118,79 @@ async function testSmtpConfig() {
         }
     } catch(e) { toast('Error: ' + e.message, 'error'); }
     finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
+}
+
+// ─── Completar pesos desde los datos del producto (por ASIN) ────────
+let fillWeightsCancel = false;
+async function fillWeights() {
+    const btn = document.getElementById('fill-weights-btn');
+    if (btn && btn.dataset.running === '1') { fillWeightsCancel = true; return; }
+
+    let info;
+    try {
+        info = await (await fetch('/api/items/weights/pending')).json();
+    } catch (e) { toast('No se pudo consultar', 'error'); return; }
+
+    if (!info.asins) {
+        await confirmDialog({
+            icon: '⚖️', title: 'No hay nada para completar',
+            message: info.asins_sin_dato
+                ? `Todos los ítems con ASIN ya tienen peso, o ya se consultaron.\n\n`
+                  + `${info.asins_sin_dato} ASIN(s) no tienen peso cargado en MeliOS.`
+                : 'Todos los ítems con ASIN ya tienen peso cargado.',
+            confirmText: info.asins_sin_dato ? 'Reintentar los que fallaron' : 'Entendido',
+            cancelText: info.asins_sin_dato ? 'Cerrar' : ''
+        }).then(r => r && fillWeights.reintentar());
+        return;
+    }
+
+    const ok = await confirmDialog({
+        icon: '⚖️',
+        title: 'Completar pesos',
+        message: `Se va a buscar el peso del bulto de ${info.asins} producto(s) distintos `
+               + `para completar ${info.items} ítem(s).\n\n`
+               + `Tarda alrededor de ${Math.ceil(info.asins * 0.6)} segundos. `
+               + `Podés cortarlo cuando quieras: lo que ya se completó queda guardado.`,
+        confirmText: 'Completar'
+    });
+    if (!ok) return;
+    await correrFillWeights(false);
+}
+fillWeights.reintentar = () => correrFillWeights(true);
+
+async function correrFillWeights(reintentar) {
+    const btn = document.getElementById('fill-weights-btn');
+    const original = btn ? btn.innerHTML : '';
+    fillWeightsCancel = false;
+    if (btn) { btn.dataset.running = '1'; btn.title = 'Click para cortar'; }
+    let completados = 0, sinDato = 0, primero = true;
+    try {
+        while (!fillWeightsCancel) {
+            const res = await fetch('/api/items/weights/fill', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit: 10, reintentar: primero && reintentar })
+            });
+            primero = false;
+            if (!res.ok) { toast('Error al completar pesos', 'error'); break; }
+            const d = await res.json();
+            completados += d.items_completados;
+            sinDato += d.asins_sin_dato;
+            if (btn) btn.innerHTML = `⚖️ ${completados} listos · faltan ${d.asins_restantes} ✕`;
+            if (!d.asins_restantes || !d.asins_consultados) break;
+        }
+    } catch (err) {
+        toast('Error: ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca el peso de cada producto por ASIN y lo completa'; }
+    }
+    await loadItems();
+    await confirmDialog({
+        icon: '⚖️',
+        title: fillWeightsCancel ? 'Cortado' : 'Pesos completados',
+        message: `Se completó el peso de ${completados} ítem(s).`
+               + (sinDato ? `\n\n${sinDato} producto(s) no tienen peso cargado en MeliOS.` : ''),
+        confirmText: 'Entendido', cancelText: ''
+    });
 }
 
 // ─── Dividir un ítem en dos ─────────────────────────────────────────
