@@ -432,7 +432,7 @@
                         <div class="flex items-center gap-3">
                             <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-md text-xs font-medium shrink-0">➕ Ítem manual</button>
                             <button onclick="toggleSelectAllFiltered()" id="select-all-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Selecciona todos los ítems que se ven con los filtros actuales">☑️ Seleccionar todo</button>
-                            <button onclick="fillWeights()" id="fill-weights-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Busca el peso de cada producto por ASIN y lo completa">⚖️ Completar pesos</button>
+                            <button onclick="fillWeights()" id="fill-weights-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Busca por ASIN el peso de los ítems pendientes y lo completa">⚖️ Completar pesos</button>
                             <span class="text-xs text-gray-500 hidden md:inline">Tip: <kbd>/</kbd> para buscar · click en título/tracking/ASIN copia</span>
                         </div>
                     </div>
@@ -1163,9 +1163,9 @@
             await confirmDialog({
                 icon: '⚖️', title: 'No hay nada para completar',
                 message: info.asins_sin_dato
-                    ? `Todos los ítems con ASIN ya tienen peso, o ya se consultaron.\n\n`
+                    ? `Todos los ítems pendientes con ASIN ya tienen peso, o ya se consultaron.\n\n`
                       + `${info.asins_sin_dato} ASIN(s) no tienen peso cargado en MeliOS.`
-                    : 'Todos los ítems con ASIN ya tienen peso cargado.',
+                    : 'Todos los ítems pendientes con ASIN ya tienen peso cargado.',
                 confirmText: info.asins_sin_dato ? 'Reintentar los que fallaron' : 'Entendido',
                 cancelText: info.asins_sin_dato ? 'Cerrar' : ''
             }).then(r => r && fillWeights.reintentar());
@@ -1176,7 +1176,7 @@
             icon: '⚖️',
             title: 'Completar pesos',
             message: `Se va a buscar el peso del bulto de ${info.asins} producto(s) distintos `
-                   + `para completar ${info.items} ítem(s).\n\n`
+                   + `para completar ${info.items} ítem(s) pendientes.\n\n`
                    + `Tarda alrededor de ${Math.ceil(info.asins * 0.6)} segundos. `
                    + `Podés cortarlo cuando quieras: lo que ya se completó queda guardado.`,
             confirmText: 'Completar'
@@ -1209,7 +1209,7 @@
         } catch (err) {
             toast('Error: ' + err.message, 'error');
         } finally {
-            if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca el peso de cada producto por ASIN y lo completa'; }
+            if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca por ASIN el peso de los ítems pendientes y lo completa'; }
         }
         await loadItems();
         await confirmDialog({

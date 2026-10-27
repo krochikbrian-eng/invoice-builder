@@ -2655,12 +2655,12 @@ def tracking_lookup():
 
 @app.route('/api/items/weights/pending')
 def weights_pending():
-    """Cuántos ítems de la empresa activa están sin peso y tienen ASIN."""
+    """Cuántos ítems PENDIENTES de la empresa activa están sin peso y tienen ASIN."""
     company = get_company()
     conn = get_db()
     row = conn.execute(
         "SELECT COUNT(*) c, COUNT(DISTINCT asin) a FROM items "
-        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "WHERE company = ? AND status = 'pending' AND weight IS NULL AND IFNULL(asin,'') != '' "
         "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?)",
         (company, company)).fetchone()
     sin = conn.execute("SELECT COUNT(*) c FROM asin_sin_peso WHERE company = ?",
@@ -2670,7 +2670,7 @@ def weights_pending():
 
 @app.route('/api/items/weights/fill', methods=['POST'])
 def fill_weights():
-    """Completa el peso de los ítems consultando el ASIN en la API de productos.
+    """Completa el peso de los ítems PENDIENTES consultando el ASIN en la API de productos.
 
     Trabaja de a tandas (una consulta por ASIN distinto, no por ítem) para que
     el pedido no se eternice: el front lo llama varias veces hasta terminar.
@@ -2689,7 +2689,7 @@ def fill_weights():
 
     asins = [r['asin'] for r in conn.execute(
         "SELECT DISTINCT asin FROM items "
-        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "WHERE company = ? AND status = 'pending' AND weight IS NULL AND IFNULL(asin,'') != '' "
         "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?) "
         "ORDER BY asin LIMIT ?", (company, company, limit)).fetchall()]
 
@@ -2702,14 +2702,15 @@ def fill_weights():
                          (company, asin))
             continue
         cur = conn.execute(
-            "UPDATE items SET weight = ? WHERE company = ? AND asin = ? AND weight IS NULL",
+            "UPDATE items SET weight = ? WHERE company = ? AND asin = ? "
+            "AND status = 'pending' AND weight IS NULL",
             (kg, company, asin))
         completados += cur.rowcount
     conn.commit()
 
     restantes = conn.execute(
         "SELECT COUNT(DISTINCT asin) c FROM items "
-        "WHERE company = ? AND weight IS NULL AND IFNULL(asin,'') != '' "
+        "WHERE company = ? AND status = 'pending' AND weight IS NULL AND IFNULL(asin,'') != '' "
         "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?)",
         (company, company)).fetchone()['c']
     conn.close()

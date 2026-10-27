@@ -1135,9 +1135,9 @@ async function fillWeights() {
         await confirmDialog({
             icon: '⚖️', title: 'No hay nada para completar',
             message: info.asins_sin_dato
-                ? `Todos los ítems con ASIN ya tienen peso, o ya se consultaron.\n\n`
+                ? `Todos los ítems pendientes con ASIN ya tienen peso, o ya se consultaron.\n\n`
                   + `${info.asins_sin_dato} ASIN(s) no tienen peso cargado en MeliOS.`
-                : 'Todos los ítems con ASIN ya tienen peso cargado.',
+                : 'Todos los ítems pendientes con ASIN ya tienen peso cargado.',
             confirmText: info.asins_sin_dato ? 'Reintentar los que fallaron' : 'Entendido',
             cancelText: info.asins_sin_dato ? 'Cerrar' : ''
         }).then(r => r && fillWeights.reintentar());
@@ -1148,7 +1148,7 @@ async function fillWeights() {
         icon: '⚖️',
         title: 'Completar pesos',
         message: `Se va a buscar el peso del bulto de ${info.asins} producto(s) distintos `
-               + `para completar ${info.items} ítem(s).\n\n`
+               + `para completar ${info.items} ítem(s) pendientes.\n\n`
                + `Tarda alrededor de ${Math.ceil(info.asins * 0.6)} segundos. `
                + `Podés cortarlo cuando quieras: lo que ya se completó queda guardado.`,
         confirmText: 'Completar'
@@ -1181,7 +1181,7 @@ async function correrFillWeights(reintentar) {
     } catch (err) {
         toast('Error: ' + err.message, 'error');
     } finally {
-        if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca el peso de cada producto por ASIN y lo completa'; }
+        if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca por ASIN el peso de los ítems pendientes y lo completa'; }
     }
     await loadItems();
     await confirmDialog({
