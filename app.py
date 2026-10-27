@@ -161,7 +161,7 @@ def _migrate_config(cfg):
     if 'companies' not in cfg:
         flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
         flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
-        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key') if k in cfg}
+        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key', 'gemini_api_key') if k in cfg}
         cfg = {'companies': {'zero': flat}, **globals_kept}
     cfg.setdefault('companies', {})
     for comp in VALID_COMPANIES:
@@ -732,6 +732,75 @@ def peso_por_asin(asin, company):
                 kg = parse_peso_kg(f[campo])
                 if kg:
                     return kg
+    return None
+
+# ─── Estimación de peso con IA (Gemini) ─────────────────────────────────────
+# Se usa solo cuando MeliOS no tiene el peso del producto: le pedimos al modelo
+# el peso del paquete ya embalado para envío (producto + caja + relleno).
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
+GEMINI_MODELS = [m.strip() for m in os.environ.get(
+    'GEMINI_MODELS', 'gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash').split(',') if m.strip()]
+
+def get_gemini_api_key():
+    return (os.environ.get('GEMINI_API_KEY', '')
+            or load_config().get('gemini_api_key', '') or '').strip()
+
+PROMPT_PESO = (
+    "Sos un experto en logística y packaging. Estimá el peso de ESTE producto "
+    "YA EMBALADO para envío: producto + caja de cartón + relleno de protección.\n\n"
+    "Producto: {title}\n"
+    "ASIN de Amazon: {asin}\n\n"
+    "Reglas:\n"
+    "- Respondé el peso en KILOGRAMOS.\n"
+    "- Es el peso del bulto que despacha el courier, no el peso neto del producto.\n"
+    "- Si el título menciona cantidad (pack de 2, 4 unidades), considerá el total.\n"
+    "- Sé realista: unos auriculares embalados pesan ~0.3 kg, un monitor 27\" ~7 kg, "
+    "una aspiradora robótica de piscina ~20 kg.\n"
+    "- Si no reconocés el producto, estimá por su categoría.\n\n"
+    'Respondé SOLO este JSON: {{"peso_kg": <numero>}}'
+)
+
+def estimar_peso_ia(title, asin, timeout=20):
+    """Peso estimado en kg con Gemini, o None si no se pudo."""
+    key = get_gemini_api_key()
+    title = (title or '').strip()
+    if not key or not title:
+        return None
+    body = _json.dumps({
+        'contents': [{'parts': [{'text': PROMPT_PESO.format(title=title[:400], asin=asin or '—')}]}],
+        'generationConfig': {'temperature': 0, 'responseMimeType': 'application/json',
+                             'maxOutputTokens': 2048},
+    }).encode()
+    for model in GEMINI_MODELS:
+        req = urllib.request.Request(
+            GEMINI_URL.format(model=model), data=body, method='POST',
+            headers={'Content-Type': 'application/json', 'x-goog-api-key': key})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = _json.loads(resp.read().decode() or '{}')
+        except urllib.error.HTTPError as e:
+            if e.code in (404, 400):      # modelo inexistente: probamos el siguiente
+                continue
+            app.logger.warning('gemini %s -> HTTP %s', model, e.code)
+            return None
+        except Exception as e:
+            app.logger.warning('gemini %s falló: %s', model, e)
+            return None
+
+        try:
+            txt = data['candidates'][0]['content']['parts'][0]['text']
+            kg = float(_json.loads(txt).get('peso_kg'))
+        except Exception:
+            m = re.search(r'-?\d+(?:[.,]\d+)?', str(data))
+            if not m:
+                return None
+            try:
+                kg = float(m.group(0).replace(',', '.'))
+            except ValueError:
+                return None
+        if 0.01 <= kg <= 150:
+            return round(kg, 2)
+        return None
     return None
 
 def get_warehouse_api_key():
@@ -2687,15 +2756,23 @@ def fill_weights():
         conn.execute("DELETE FROM asin_sin_peso WHERE company = ?", (company,))
         conn.commit()
 
-    asins = [r['asin'] for r in conn.execute(
-        "SELECT DISTINCT asin FROM items "
+    # Un título por ASIN, para poder estimar con IA si MeliOS no lo tiene
+    filas = conn.execute(
+        "SELECT asin, MIN(title) title FROM items "
         "WHERE company = ? AND status = 'pending' AND weight IS NULL AND IFNULL(asin,'') != '' "
         "  AND asin NOT IN (SELECT asin FROM asin_sin_peso WHERE company = ?) "
-        "ORDER BY asin LIMIT ?", (company, company, limit)).fetchall()]
+        "GROUP BY asin ORDER BY asin LIMIT ?", (company, company, limit)).fetchall()
+    asins = [r['asin'] for r in filas]
+    titulos = {r['asin']: r['title'] for r in filas}
 
-    completados, sin_dato = 0, 0
+    completados, sin_dato, estimados = 0, 0, 0
     for asin in asins:
         kg = peso_por_asin(asin, company)
+        if kg is None:
+            # MeliOS no lo tiene: lo estimamos con IA a partir del título
+            kg = estimar_peso_ia(titulos.get(asin), asin)
+            if kg is not None:
+                estimados += 1
         if kg is None:
             sin_dato += 1
             conn.execute("INSERT OR REPLACE INTO asin_sin_peso (company, asin) VALUES (?, ?)",
@@ -2715,7 +2792,8 @@ def fill_weights():
         (company, company)).fetchone()['c']
     conn.close()
     return jsonify({'asins_consultados': len(asins), 'items_completados': completados,
-                    'asins_sin_dato': sin_dato, 'asins_restantes': restantes})
+                    'asins_sin_dato': sin_dato, 'asins_estimados': estimados,
+                    'ia_configurada': bool(get_gemini_api_key()), 'asins_restantes': restantes})
 
 @app.route('/api/items/<int:item_id>/split', methods=['POST'])
 def split_item(item_id):
@@ -2906,6 +2984,34 @@ def send_item_to_warehouse(item_id):
                     'tracking_guardado': tracking_guardado or tracking,
                     'reemplazado_por_devolucion': por_devolucion,
                     'sent': payload, 'response': resp})
+
+@app.route('/api/config/gemini', methods=['GET'])
+def get_gemini_config():
+    return jsonify({'configured': bool(get_gemini_api_key()),
+                    'from_env': bool(os.environ.get('GEMINI_API_KEY', '').strip()),
+                    'models': GEMINI_MODELS})
+
+@app.route('/api/config/gemini', methods=['PUT'])
+def set_gemini_config():
+    data = request.get_json() or {}
+    key = str(data.get('api_key', '')).strip()
+    cfg = load_config()
+    if key:
+        cfg['gemini_api_key'] = key
+    else:
+        cfg.pop('gemini_api_key', None)
+    save_config(cfg)
+    return jsonify({'configured': bool(get_gemini_api_key())})
+
+@app.route('/api/config/gemini/test', methods=['POST'])
+def test_gemini():
+    """Prueba la clave estimando el peso de un producto conocido."""
+    if not get_gemini_api_key():
+        return jsonify({'error': 'Falta cargar la API key de Gemini'}), 400
+    kg = estimar_peso_ia('Sony WH-1000XM5 Wireless Noise Canceling Headphones', 'B09XS7JWHH')
+    if kg is None:
+        return jsonify({'error': 'La clave no funcionó o el modelo no respondió'}), 502
+    return jsonify({'message': f'Funciona · estimó {kg} kg para unos auriculares Sony WH-1000XM5'})
 
 @app.route('/api/config/warehouse', methods=['GET'])
 def get_warehouse_config():

@@ -628,6 +628,23 @@
                     <p id="wh-status" class="text-xs text-gray-500 mt-2"></p>
                 </div>
 
+                <!-- Estimación de peso con IA -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">🤖 Estimar pesos con IA (Gemini)</h3>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Cuando MeliOS no tiene el peso de un producto, se estima con IA el peso
+                        del paquete ya embalado (producto + caja + relleno).
+                    </p>
+                    <div class="flex gap-2 items-center">
+                        <input type="password" id="gem-key" placeholder="API key de Gemini"
+                               class="field flex-1 px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')saveGeminiCfg()">
+                        <button onclick="saveGeminiCfg()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">Guardar</button>
+                        <button onclick="testGemini()" class="btn-ghost px-4 py-2 rounded-md text-sm font-medium">Probar</button>
+                    </div>
+                    <p id="gem-status" class="text-xs text-gray-500 mt-2"></p>
+                </div>
+
                 <!-- Invoice Counter -->
                 <div class="card p-5">
                     <h3 class="text-sm font-semibold text-gray-300 mb-1">Contador de Invoice</h3>
@@ -937,6 +954,41 @@
         loadWarehouseCfg();
     }
 
+    // ─── Config de Gemini ───────────────────────────────────────────────
+    async function loadGeminiCfg() {
+        try {
+            const d = await (await fetch('/api/config/gemini')).json();
+            const el = document.getElementById('gem-status');
+            if (!el) return;
+            el.textContent = d.configured
+                ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
+                : 'API key: sin configurar — los productos que MeliOS no tenga quedan sin peso';
+            el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
+        } catch (e) {}
+    }
+    async function saveGeminiCfg() {
+        const input = document.getElementById('gem-key');
+        const res = await fetch('/api/config/gemini', {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ api_key: input.value })
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(d.error || 'Error al guardar', 'error'); return; }
+        input.value = '';
+        toast(d.configured ? 'API key guardada' : 'API key borrada', 'success');
+        loadGeminiCfg();
+    }
+    async function testGemini() {
+        const el = document.getElementById('gem-status');
+        if (el) { el.textContent = 'Probando…'; el.style.color = '#9399b2'; }
+        const res = await fetch('/api/config/gemini/test', { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (el) {
+            el.textContent = res.ok ? d.message : (d.error || 'Error');
+            el.style.color = res.ok ? '#a6e3a1' : '#f38ba8';
+        }
+    }
+
     // ─── Invoice Counter ────────────────────────────────────────────────
     async function loadInvoiceCounter() {
         try {
@@ -1191,7 +1243,7 @@
         const original = btn ? btn.innerHTML : '';
         fillWeightsCancel = false;
         if (btn) { btn.dataset.running = '1'; btn.title = 'Click para cortar'; }
-        let completados = 0, sinDato = 0, primero = true;
+        let completados = 0, sinDato = 0, estimados = 0, iaOn = true, primero = true;
         try {
             while (!fillWeightsCancel) {
                 const res = await fetch('/api/items/weights/fill', {
@@ -1203,6 +1255,8 @@
                 const d = await res.json();
                 completados += d.items_completados;
                 sinDato += d.asins_sin_dato;
+                estimados += d.asins_estimados || 0;
+                iaOn = d.ia_configurada;
                 if (btn) btn.innerHTML = `⚖️ ${completados} listos · faltan ${d.asins_restantes} ✕`;
                 if (!d.asins_restantes || !d.asins_consultados) break;
             }
@@ -1216,7 +1270,9 @@
             icon: '⚖️',
             title: fillWeightsCancel ? 'Cortado' : 'Pesos completados',
             message: `Se completó el peso de ${completados} ítem(s).`
-                   + (sinDato ? `\n\n${sinDato} producto(s) no tienen peso cargado en MeliOS.` : ''),
+                   + (estimados ? `\n\n${estimados} producto(s) no estaban en MeliOS y se estimaron con IA.` : '')
+                   + (sinDato ? `\n\n${sinDato} producto(s) quedaron sin peso.`
+                              + (iaOn ? '' : ' Cargá la API key de Gemini en Configuración para estimarlos.') : ''),
             confirmText: 'Entendido', cancelText: ''
         });
     }
@@ -1416,7 +1472,7 @@
         if (name === 'upload') loadLastUpload();
         if (name === 'items') loadItems();
         if (name === 'history') loadHistory();
-        if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadWarehouseCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+        if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadWarehouseCfg(); loadGeminiCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
         localStorage.setItem('lastTab', name);
     }
 
