@@ -107,6 +107,9 @@
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
         /* Botones de acción de la fila: todos con la altura del de MeliOS */
+        /* Ítems del historial: título, cantidad×precio y peso juntos; "Sacar" a la derecha */
+        .hist-item-row { display: grid; grid-template-columns: minmax(0, 28rem) 7.5rem 4.5rem 1fr auto; column-gap: 0.75rem; }
+        @media (max-width: 900px) { .hist-item-row { grid-template-columns: minmax(0, 1fr) auto auto 0 auto; } }
         .row-btn { height: 26px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 
         /* Botones del historial: mismo estilo relleno, paleta apagada */
@@ -2569,15 +2572,15 @@
                     <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems (${inv.items_count})</summary>
                     <div class="mt-2 space-y-1">
                         ${inv.items.map(i => `
-                            <div class="text-xs text-gray-400 flex justify-between items-center gap-2">
+                            <div class="hist-item-row text-xs text-gray-400 items-center">
                                 ${(i.asin || '').trim()
                                     ? `<a href="https://www.amazon.com/dp/${encodeURIComponent(i.asin.trim())}" target="_blank" rel="noopener"
-                                          class="truncate max-w-sm hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 60))}</a>`
-                                    : `<span class="truncate max-w-sm copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>`}
-                                <span class="flex items-center gap-2 shrink-0">
-                                    <span class="tabular-nums">${i.qty} × $${i.price.toFixed(2)}</span>
-                                    <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
-                                </span>
+                                          class="truncate hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 60))}</a>`
+                                    : `<span class="truncate copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>`}
+                                <span class="tabular-nums text-right whitespace-nowrap">${i.qty} × $${i.price.toFixed(2)}</span>
+                                <span class="tabular-nums text-right whitespace-nowrap text-gray-500">${i.weight != null ? Number(i.weight) + ' kg' : ''}</span>
+                                <span></span>
+                                <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
                             </div>
                         `).join('')}
                     </div>
