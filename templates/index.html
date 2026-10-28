@@ -108,8 +108,16 @@
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
         /* Botones de acción de la fila: todos con la altura del de MeliOS */
         /* Ítems del historial: título, cantidad×precio y peso juntos; "Sacar" a la derecha */
-        .hist-item-row { display: grid; grid-template-columns: minmax(0, 32.2rem) 7.5rem 4.5rem 1fr auto; column-gap: 0.75rem; }
-        @media (max-width: 900px) { .hist-item-row { grid-template-columns: minmax(0, 1fr) auto auto 0 auto; } }
+        .hist-items { display: grid; grid-template-columns: fit-content(32.2rem) max-content max-content 1fr max-content;
+                      column-gap: 0.75rem; row-gap: 0.25rem; align-items: center; }
+        .hist-item-row { display: contents; }
+        .hist-items .hist-title { justify-self: start; max-width: 100%; }   /* el link mide lo que el texto */
+        .hist-items .hist-price { padding-left: 2.5rem; text-align: right; }
+        .hist-items .hist-weight { min-width: 3.5rem; text-align: right; }
+        @media (max-width: 900px) {
+            .hist-items { grid-template-columns: minmax(0, 1fr) max-content max-content 0 max-content; }
+            .hist-items .hist-price { padding-left: 0.5rem; }
+        }
         .row-btn { height: 26px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 
         /* Botones del historial: mismo estilo relleno, paleta apagada */
@@ -2579,16 +2587,16 @@
                     </div>
                 </div>
                 <details class="mt-3">
-                    <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300">Ver ítems (${inv.items_count})</summary>
-                    <div class="hist-items mt-2 space-y-1 cursor-default">
+                    <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300" style="width:fit-content;">Ver ítems (${inv.items_count})</summary>
+                    <div class="hist-items mt-2 text-xs text-gray-400 cursor-default">
                         ${inv.items.map(i => `
-                            <div class="hist-item-row text-xs text-gray-400 items-center">
+                            <div class="hist-item-row">
                                 ${(i.asin || '').trim()
                                     ? `<a href="https://www.amazon.com/dp/${encodeURIComponent(i.asin.trim())}" target="_blank" rel="noopener"
-                                          class="truncate hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 69))}</a>`
-                                    : `<span class="truncate copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 69))}</span>`}
-                                <span class="tabular-nums text-right whitespace-nowrap">${i.qty} × $${i.price.toFixed(2)}</span>
-                                <span class="tabular-nums text-right whitespace-nowrap text-gray-500">${i.weight != null ? Number(i.weight) + ' kg' : ''}</span>
+                                          class="hist-title truncate hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 69))}</a>`
+                                    : `<span class="hist-title truncate copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 69))}</span>`}
+                                <span class="hist-price tabular-nums whitespace-nowrap">${i.qty} × $${i.price.toFixed(2)}</span>
+                                <span class="hist-weight tabular-nums whitespace-nowrap text-gray-500">${i.weight != null ? Number(i.weight) + ' kg' : ''}</span>
                                 <span></span>
                                 <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
                             </div>
