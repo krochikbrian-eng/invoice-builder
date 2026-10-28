@@ -1470,12 +1470,14 @@ async function loadLastUpload() {
     } catch (e) {}
 }
 
-// Click en cualquier parte libre de la tarjeta del invoice: expande / colapsa los ítems.
+// Doble click en cualquier parte libre de la tarjeta: expande / colapsa los ítems.
+// (Un solo click alcanza en "Ver ítems", que es el comportamiento nativo del <details>.)
+// No reacciona a botones, links ni a la lista de ítems ya abierta.
 function toggleInvoiceCard(ev, card) {
     if (ev.target.closest('button, a, input, select, textarea, label, summary, .hist-items')) return;
-    if ((window.getSelection && window.getSelection().toString()) || '') return;
     const det = card.querySelector('details');
     if (det) det.open = !det.open;
+    if (window.getSelection) window.getSelection().removeAllRanges();   // el doble click no deja texto marcado
 }
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
@@ -1962,7 +1964,7 @@ async function loadHistory() {
             const sentBadge = inv.all_sent
                 ? '<span class="badge ml-1" style="background:rgba(166,227,161,0.2);color:#a6e3a1;">Enviado</span>'
                 : '<span class="badge ml-1" style="background:rgba(249,226,175,0.2);color:#f9e2af;">Pendiente</span>';
-            return `<div class="card history-card" style="cursor:pointer;" onclick="toggleInvoiceCard(event, this)">
+            return `<div class="card history-card" ondblclick="toggleInvoiceCard(event, this)" onmousedown="if(event.detail>1 && !event.target.closest('.hist-items'))event.preventDefault()">
                 <div class="flex items-start justify-between gap-2">
                     <div class="flex-1 min-w-0">
                         <div class="history-title flex flex-wrap items-center gap-1">

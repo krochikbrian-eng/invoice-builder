@@ -1529,13 +1529,14 @@
         } catch (e) {}
     }
 
-    // Click en cualquier parte libre de la tarjeta del invoice: expande / colapsa los ítems.
-    // No reacciona a botones, links, al "Ver ítems" (ya lo hace solo) ni a la lista abierta.
+    // Doble click en cualquier parte libre de la tarjeta: expande / colapsa los ítems.
+    // (Un solo click alcanza en "Ver ítems", que es el comportamiento nativo del <details>.)
+    // No reacciona a botones, links ni a la lista de ítems ya abierta.
     function toggleInvoiceCard(ev, card) {
         if (ev.target.closest('button, a, input, select, textarea, label, summary, .hist-items')) return;
-        if ((window.getSelection && window.getSelection().toString()) || '') return;  // estaba seleccionando texto
         const det = card.querySelector('details');
         if (det) det.open = !det.open;
+        if (window.getSelection) window.getSelection().removeAllRanges();   // el doble click no deja texto marcado
     }
 
     // ─── Tabs ───────────────────────────────────────────────────────────
@@ -2558,7 +2559,7 @@
                 : '<span class="badge bg-blue-500/20 text-blue-300 ml-2">Invoice</span>';
             const label = isRemito ? 'Especial' : 'Invoice';
             return `
-            <div class="card card-hover p-4 cursor-pointer" onclick="toggleInvoiceCard(event, this)">
+            <div class="card card-hover p-4" ondblclick="toggleInvoiceCard(event, this)" onmousedown="if(event.detail>1 && !event.target.closest('.hist-items'))event.preventDefault()">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                         <h3 class="text-lg font-semibold">
