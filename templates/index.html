@@ -108,14 +108,15 @@
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
         /* Botones de acción de la fila: todos con la altura del de MeliOS */
         /* Ítems del historial: título, cantidad×precio y peso juntos; "Sacar" a la derecha */
-        .hist-items { display: grid; grid-template-columns: fit-content(32.2rem) max-content max-content 1fr max-content;
+        .hist-items { display: grid; grid-template-columns: fit-content(32.2rem) max-content max-content max-content 1fr max-content;
                       column-gap: 0.75rem; row-gap: 0.25rem; align-items: center; }
         .hist-item-row { display: contents; }
         .hist-items .hist-title { justify-self: start; max-width: 100%; }   /* el link mide lo que el texto */
         .hist-items .hist-price { padding-left: 2.5rem; text-align: right; }
+        .hist-items .hist-subtotal { min-width: 5rem; text-align: right; }
         .hist-items .hist-weight { min-width: 3.5rem; text-align: right; }
         @media (max-width: 900px) {
-            .hist-items { grid-template-columns: minmax(0, 1fr) max-content max-content 0 max-content; }
+            .hist-items { grid-template-columns: minmax(0, 1fr) max-content max-content max-content 0 max-content; }
             .hist-items .hist-price { padding-left: 0.5rem; }
         }
         .row-btn { height: 26px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
@@ -2576,7 +2577,7 @@
                             ${inv.all_sent ? '<span class="badge bg-green-500/20 text-green-300 ml-2">Enviado</span>' : '<span class="badge bg-yellow-500/20 text-yellow-300 ml-2">Pendiente</span>'}
                         </h3>
                         <p class="text-sm text-gray-400 mt-1">
-                            📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 <span class="text-green-400 font-semibold">${fmtMoney(inv.total)}</span>
+                            📅 ${inv.date} · 📦 ${inv.items_count} items · 💰 <span class="text-green-400 font-semibold">${fmtMoney(inv.total)}</span>${inv.discount > 0 ? ` · <span class="text-yellow-300">🏷️ ${Number(inv.discount).toFixed(inv.discount % 1 ? 1 : 0)}% desc.</span>` : ''}
                         </p>
                     </div>
                     <div class="flex gap-2 flex-wrap">
@@ -2595,7 +2596,10 @@
                                     ? `<a href="https://www.amazon.com/dp/${encodeURIComponent(i.asin.trim())}" target="_blank" rel="noopener"
                                           class="hist-title truncate hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 69))}</a>`
                                     : `<span class="hist-title truncate copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 69))}</span>`}
-                                <span class="hist-price tabular-nums whitespace-nowrap">${i.qty} × $${i.price.toFixed(2)}</span>
+                                <span class="hist-price tabular-nums whitespace-nowrap">${i.qty} × ${(i.price_final != null && i.price_final < i.price - 0.001)
+                                    ? `<s class="text-gray-600">$${i.price.toFixed(2)}</s> <span class="text-yellow-300">$${Number(i.price_final).toFixed(2)}</span>`
+                                    : `$${i.price.toFixed(2)}`}</span>
+                                <span class="hist-subtotal tabular-nums whitespace-nowrap text-gray-300">$${(i.qty * (i.price_final != null ? i.price_final : i.price)).toFixed(2)}</span>
                                 <span class="hist-weight tabular-nums whitespace-nowrap text-gray-500">${i.weight != null ? Number(i.weight) + ' kg' : ''}</span>
                                 <span></span>
                                 <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>

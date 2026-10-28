@@ -2202,6 +2202,10 @@ def get_invoices():
         except (IndexError, KeyError):
             pass
 
+        items_out = [dict(i) for i in items]
+        d = _effective_discount(inv, items_out)
+        for it in items_out:
+            it['price_final'] = discounted_price(it['price'], d)
         result.append({
             'id': inv['id'],
             'invoice_number': inv['invoice_number'],
@@ -2210,7 +2214,8 @@ def get_invoices():
             'items_count': inv['items_count'],
             'created_at': inv['created_at'],
             'type': inv_type,
-            'items': [dict(i) for i in items],
+            'discount': d,
+            'items': items_out,
             'all_sent': all(i['status'] == 'sent' for i in items),
         })
 
@@ -2481,11 +2486,11 @@ def _hdr(value, limit=300):
     s = ' '.join(s.split())
     return s[:limit]
 
-def _apply_invoice_discount(inv, items):
-    """Apply the invoice's discount % to item prices (for re-downloads).
+def _effective_discount(inv, items):
+    """Descuento % que se aplicó al generar el invoice.
 
-    Uses the stored `discount` column. For invoices created before that column
-    existed, the discount is inferred from the stored total vs. the raw sum.
+    Usa la columna `discount`. Para invoices anteriores a esa columna, lo
+    deduce comparando el total guardado contra la suma sin descuento.
     """
     try:
         d = float(inv['discount'] or 0)
@@ -2502,9 +2507,18 @@ def _apply_invoice_discount(inv, items):
             inferred = (1 - stored_total / raw_total) * 100
             if 0.5 <= inferred <= 95:  # sane range; ignore rounding noise
                 d = round(inferred, 2)
+    return d
+
+def discounted_price(price, d):
+    """Mismo redondeo que al generar el invoice."""
+    return round((price or 0) * (1 - d / 100), 1) if d > 0 else (price or 0)
+
+def _apply_invoice_discount(inv, items):
+    """Apply the invoice's discount % to item prices (for re-downloads)."""
+    d = _effective_discount(inv, items)
     if d > 0:
         for it in items:
-            it['price'] = round(it['price'] * (1 - d / 100), 1)
+            it['price'] = discounted_price(it['price'], d)
     return items
 
 def bump_invoice_counter(company, invoice_number):
