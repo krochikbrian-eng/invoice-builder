@@ -106,6 +106,8 @@
             transition: background .15s ease;
         }
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
+        /* Botones de acción de la fila: todos con la altura del de MeliOS */
+        .row-btn { height: 26px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 
         /* Botones del historial: mismo estilo relleno, paleta apagada */
         .btn-hist {
@@ -1832,12 +1834,12 @@
                             </button>` : ''}
                             ${conMeliOS ? `
                             <button id="wh-btn-${item.id}" onclick="event.stopPropagation(); sendToWarehouse(${item.id})"
-                                    class="btn-ghost px-2 py-1 rounded text-xs whitespace-nowrap">
+                                    class="btn-ghost row-btn px-2 rounded text-xs whitespace-nowrap">
                                 🏬 Enviar MeliOS
                             </button>` : ''}
                         </div>
                         <div class="flex items-center gap-2">
-                            ${!isUsed && !inBox ? `<button onclick="event.stopPropagation(); addToBox(${item.id})" class="text-xs btn-primary px-3 py-1.5 rounded-md font-medium">Agregar</button>` : ''}
+                            ${!isUsed && !inBox ? `<button onclick="event.stopPropagation(); addToBox(${item.id})" class="text-xs btn-primary row-btn rounded-md font-medium" style="padding-left:9.6px;padding-right:9.6px;">Agregar</button>` : ''}
                             ${inBox ? `<span class="badge bg-blue-500/20 text-blue-300">En caja ✓</span>` : ''}
                             <button onclick="event.stopPropagation(); deleteItem(${item.id})" class="text-xs text-red-400/60 hover:text-red-300 hover:bg-red-400/10 rounded p-1.5 transition-colors" title="Eliminar">🗑️</button>
                         </div>
