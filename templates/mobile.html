@@ -390,7 +390,7 @@
             <div class="flex items-center justify-between mb-3 gap-2">
                 <h2 class="text-base font-bold">📦 Ítems <span id="pending-count" style="color:#89b4fa;"></span></h2>
                 <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0">➕ Ítem manual</button>
-                <button onclick="fillWeights()" id="fill-weights-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0" style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#cdd6f4;">⚖️ Pesos</button>
+                <button onclick="fillWeights()" id="fill-weights-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 hidden" style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#cdd6f4;">⚖️ Pesos</button>
             </div>
 
             <!-- Search + filter -->
@@ -1167,6 +1167,16 @@ async function testSmtpConfig() {
     finally { btn.disabled = false; btn.textContent = 'Probar conexión'; }
 }
 
+// El botón de completar pesos solo tiene sentido si hay pendientes sin peso
+async function refreshFillWeightsBtn() {
+    const btn = document.getElementById('fill-weights-btn');
+    if (!btn || btn.dataset.running === '1') return;
+    try {
+        const d = await (await fetch('/api/items/weights/pending')).json();
+        btn.classList.toggle('hidden', !d.asins);
+    } catch (e) {}
+}
+
 // ─── Peso de un ítem suelto (MeliOS y si no, IA) ────────────────────
 async function autoWeight(itemId) {
     const btn = document.getElementById(`w-btn-${itemId}`);
@@ -1183,6 +1193,7 @@ async function autoWeight(itemId) {
             if (it) it.weight = d.weight;
             toast(d.message || 'Peso completado', 'success');
             renderItems();
+            refreshFillWeightsBtn();
             return;
         }
         toast(d.error || 'No se pudo completar el peso', 'warning');
@@ -1260,6 +1271,7 @@ async function correrFillWeights(reintentar) {
         if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca por ASIN el peso de los ítems pendientes y lo completa'; }
     }
     await loadItems();
+    refreshFillWeightsBtn();
     await confirmDialog({
         icon: '⚖️',
         title: fillWeightsCancel ? 'Cortado' : 'Pesos completados',
@@ -1548,6 +1560,7 @@ async function loadItems() {
         const res = await fetch('/api/items');
         allItems = await res.json();
         renderItems();
+        refreshFillWeightsBtn();
     } catch (err) {
         toast('Error al cargar ítems', 'error');
     }

@@ -432,7 +432,7 @@
                         <div class="flex items-center gap-3">
                             <button onclick="openManualItemModal()" class="btn-primary px-3 py-1.5 rounded-md text-xs font-medium shrink-0">➕ Ítem manual</button>
                             <button onclick="toggleSelectAllFiltered()" id="select-all-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Selecciona todos los ítems que se ven con los filtros actuales">☑️ Seleccionar todo</button>
-                            <button onclick="fillWeights()" id="fill-weights-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0" title="Busca por ASIN el peso de los ítems pendientes y lo completa">⚖️ Completar pesos</button>
+                            <button onclick="fillWeights()" id="fill-weights-btn" class="btn-ghost px-3 py-1.5 rounded-md text-xs font-medium shrink-0 hidden" title="Busca por ASIN el peso de los ítems pendientes y lo completa">⚖️ Completar pesos</button>
                             <span class="text-xs text-gray-500 hidden md:inline">Tip: <kbd>/</kbd> para buscar · click en título/tracking/ASIN copia</span>
                         </div>
                     </div>
@@ -1200,6 +1200,16 @@
         } catch (e) { out.textContent = 'Error: ' + e.message; }
     }
 
+    // El botón de completar pesos solo tiene sentido si hay pendientes sin peso
+    async function refreshFillWeightsBtn() {
+        const btn = document.getElementById('fill-weights-btn');
+        if (!btn || btn.dataset.running === '1') return;
+        try {
+            const d = await (await fetch('/api/items/weights/pending')).json();
+            btn.classList.toggle('hidden', !d.asins);
+        } catch (e) {}
+    }
+
     // ─── Peso de un ítem suelto (MeliOS y si no, IA) ────────────────────
     async function autoWeight(itemId) {
         const btn = document.getElementById(`w-btn-${itemId}`);
@@ -1216,6 +1226,7 @@
                 if (it) it.weight = d.weight;
                 toast(d.message || 'Peso completado', 'success');
                 renderItems();
+                refreshFillWeightsBtn();
                 return;
             }
             toast(d.error || 'No se pudo completar el peso', 'warning');
@@ -1293,6 +1304,7 @@
             if (btn) { btn.dataset.running = ''; btn.innerHTML = original; btn.title = 'Busca por ASIN el peso de los ítems pendientes y lo completa'; }
         }
         await loadItems();
+        refreshFillWeightsBtn();
         await confirmDialog({
             icon: '⚖️',
             title: fillWeightsCancel ? 'Cortado' : 'Pesos completados',
@@ -1604,6 +1616,7 @@
             selectedItems = new Set([...selectedItems].filter(id => allItems.some(i => i.id === id)));
             pruneBox();   // saca de la caja lo que ya no está pendiente
             renderItems();
+            refreshFillWeightsBtn();
             updateNextInvoice();
         } catch (err) {
             toast('Error al cargar ítems', 'error');
