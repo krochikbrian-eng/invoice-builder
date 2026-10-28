@@ -161,7 +161,7 @@ def _migrate_config(cfg):
     if 'companies' not in cfg:
         flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
         flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
-        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key', 'gemini_api_key') if k in cfg}
+        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key', 'gemini_api_key', 'gemini_model') if k in cfg}
         cfg = {'companies': {'zero': flat}, **globals_kept}
     cfg.setdefault('companies', {})
     for comp in VALID_COMPANIES:
@@ -738,8 +738,17 @@ def peso_por_asin(asin, company):
 # Se usa solo cuando MeliOS no tiene el peso del producto: le pedimos al modelo
 # el peso del paquete ya embalado para envío (producto + caja + relleno).
 GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
-GEMINI_MODELS = [m.strip() for m in os.environ.get(
-    'GEMINI_MODELS', 'gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash').split(',') if m.strip()]
+# Primero el modelo elegido; los siguientes son respaldo por si ese no existe
+# para la clave (la API devuelve 404 y pasamos al que sigue).
+GEMINI_DEFAULT_MODELS = 'gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash'
+
+def gemini_models():
+    env = os.environ.get('GEMINI_MODELS', '').strip()
+    elegido = (load_config().get('gemini_model', '') or '').strip()
+    base = [m.strip() for m in (env or GEMINI_DEFAULT_MODELS).split(',') if m.strip()]
+    if elegido:
+        base = [elegido] + [m for m in base if m != elegido]
+    return base
 
 def get_gemini_api_key():
     return (os.environ.get('GEMINI_API_KEY', '')
@@ -771,7 +780,7 @@ def estimar_peso_ia(title, asin, timeout=20):
         'generationConfig': {'temperature': 0, 'responseMimeType': 'application/json',
                              'maxOutputTokens': 2048},
     }).encode()
-    for model in GEMINI_MODELS:
+    for model in gemini_models():
         req = urllib.request.Request(
             GEMINI_URL.format(model=model), data=body, method='POST',
             headers={'Content-Type': 'application/json', 'x-goog-api-key': key})
@@ -2722,6 +2731,42 @@ def tracking_lookup():
     return jsonify({'found': True, 'tracking': data.get('tracking') or tracking,
                     'count': len(results), 'results': results})
 
+@app.route('/api/items/<int:item_id>/weight/auto', methods=['POST'])
+def auto_weight_item(item_id):
+    """Completa el peso de UN ítem: primero MeliOS por ASIN, si no estima con IA."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if row is None:
+        conn.close()
+        return jsonify({'error': 'Ítem no encontrado'}), 404
+    cols = row.keys()
+    company = (row['company'] if 'company' in cols else 'zero') or 'zero'
+    asin = (row['asin'] or '').strip()
+    titulo = (row['title'] or '').strip()
+
+    kg, origen = None, ''
+    if asin:
+        kg = peso_por_asin(asin, company)
+        origen = 'MeliOS'
+    if kg is None:
+        kg = estimar_peso_ia(titulo, asin)
+        origen = 'estimado con IA'
+    if kg is None:
+        conn.close()
+        falta_ia = not get_gemini_api_key()
+        return jsonify({'error': 'No se pudo averiguar el peso de este producto.'
+                                 + (' Cargá la API key de Gemini en Configuración para estimarlo.'
+                                    if falta_ia else ''),
+                        'sin_dato': True}), 404
+
+    conn.execute("UPDATE items SET weight = ? WHERE id = ?", (kg, item_id))
+    # si el dato vino de MeliOS, ya no hace falta tenerlo anotado como sin peso
+    if asin and origen == 'MeliOS':
+        conn.execute("DELETE FROM asin_sin_peso WHERE company = ? AND asin = ?", (company, asin))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Peso: {kg} kg ({origen})', 'weight': kg, 'origen': origen})
+
 @app.route('/api/items/weights/pending')
 def weights_pending():
     """Cuántos ítems PENDIENTES de la empresa activa están sin peso y tienen ASIN."""
@@ -2989,19 +3034,51 @@ def send_item_to_warehouse(item_id):
 def get_gemini_config():
     return jsonify({'configured': bool(get_gemini_api_key()),
                     'from_env': bool(os.environ.get('GEMINI_API_KEY', '').strip()),
-                    'models': GEMINI_MODELS})
+                    'model': gemini_models()[0],
+                    'models': gemini_models()})
 
 @app.route('/api/config/gemini', methods=['PUT'])
 def set_gemini_config():
     data = request.get_json() or {}
-    key = str(data.get('api_key', '')).strip()
     cfg = load_config()
-    if key:
-        cfg['gemini_api_key'] = key
-    else:
-        cfg.pop('gemini_api_key', None)
+    if 'api_key' in data:
+        key = str(data.get('api_key', '')).strip()
+        if key:
+            cfg['gemini_api_key'] = key
+        else:
+            cfg.pop('gemini_api_key', None)
+    if 'model' in data:
+        modelo = str(data.get('model', '')).strip()[:80]
+        if modelo:
+            cfg['gemini_model'] = modelo
+        else:
+            cfg.pop('gemini_model', None)
     save_config(cfg)
-    return jsonify({'configured': bool(get_gemini_api_key())})
+    return jsonify({'configured': bool(get_gemini_api_key()), 'model': gemini_models()[0]})
+
+@app.route('/api/config/gemini/available-models')
+def gemini_available_models():
+    """Modelos que esa API key puede usar para generar texto."""
+    key = get_gemini_api_key()
+    if not key:
+        return jsonify({'error': 'Falta cargar la API key de Gemini'}), 400
+    req = urllib.request.Request(
+        'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+        headers={'x-goog-api-key': key})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = _json.loads(resp.read().decode() or '{}')
+    except Exception as e:
+        return jsonify({'error': f'No se pudo consultar Google: {e}'}), 502
+    modelos = []
+    for m in (data.get('models') or []):
+        if 'generateContent' not in (m.get('supportedGenerationMethods') or []):
+            continue
+        nombre = (m.get('name') or '').replace('models/', '')
+        if nombre:
+            modelos.append(nombre)
+    modelos.sort()
+    return jsonify({'models': modelos, 'actual': gemini_models()[0]})
 
 @app.route('/api/config/gemini/test', methods=['POST'])
 def test_gemini():
@@ -3011,7 +3088,8 @@ def test_gemini():
     kg = estimar_peso_ia('Sony WH-1000XM5 Wireless Noise Canceling Headphones', 'B09XS7JWHH')
     if kg is None:
         return jsonify({'error': 'La clave no funcionó o el modelo no respondió'}), 502
-    return jsonify({'message': f'Funciona · estimó {kg} kg para unos auriculares Sony WH-1000XM5'})
+    return jsonify({'message': f'Funciona ({gemini_models()[0]}) · estimó {kg} kg '
+                               f'para unos auriculares Sony WH-1000XM5'})
 
 @app.route('/api/config/warehouse', methods=['GET'])
 def get_warehouse_config():

@@ -1200,6 +1200,33 @@
         } catch (e) { out.textContent = 'Error: ' + e.message; }
     }
 
+    // ─── Peso de un ítem suelto (MeliOS y si no, IA) ────────────────────
+    async function autoWeight(itemId) {
+        const btn = document.getElementById(`w-btn-${itemId}`);
+        const original = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full"></span>';
+        }
+        try {
+            const res = await fetch(`/api/items/${itemId}/weight/auto`, { method: 'POST' });
+            const d = await res.json().catch(() => ({}));
+            if (res.ok) {
+                const it = allItems.find(i => i.id === itemId);
+                if (it) it.weight = d.weight;
+                toast(d.message || 'Peso completado', 'success');
+                renderItems();
+                return;
+            }
+            toast(d.error || 'No se pudo completar el peso', 'warning');
+        } catch (err) {
+            toast('Error: ' + err.message, 'error');
+        } finally {
+            const b = document.getElementById(`w-btn-${itemId}`);
+            if (b) { b.disabled = false; if (original) b.innerHTML = original; }
+        }
+    }
+
     // ─── Completar pesos desde los datos del producto (por ASIN) ────────
     let fillWeightsCancel = false;
     async function fillWeights() {
@@ -1757,6 +1784,10 @@
                             <button onclick="event.stopPropagation(); openEditItemModal(${item.id})" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Editar título y tracking">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                             </button>
+                            ${item.weight == null ? `
+                            <button id="w-btn-${item.id}" onclick="event.stopPropagation(); autoWeight(${item.id})" class="text-yellow-300/70 hover:text-yellow-200 rounded p-1.5 hover:bg-white/5 transition-colors" title="Buscar el peso de este producto">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 7a3 3 0 006 0z"/><path d="M19 7l3 7a3 3 0 01-6 0z"/><path d="M8 21h8"/></svg>
+                            </button>` : ''}
                             ${item.qty > 1 ? `
                             <button onclick="event.stopPropagation(); splitItem(${item.id})" class="text-gray-400 hover:text-purple-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Dividir en dos">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
