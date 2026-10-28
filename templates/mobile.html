@@ -1180,13 +1180,16 @@ async function refreshFillWeightsBtn() {
 // ─── Peso de un ítem suelto (MeliOS y si no, IA) ────────────────────
 async function autoWeight(itemId) {
     const btn = document.getElementById(`w-btn-${itemId}`);
-    const original = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full"></span>';
-    }
+    if (!btn || btn.dataset.running === '1') return;
+    const original = btn.innerHTML;
+    btn.dataset.running = '1';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="animate-spin" style="display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;"></span>';
+
+    const ctrl = new AbortController();
+    const corte = setTimeout(() => ctrl.abort(), 45000);
     try {
-        const res = await fetch(`/api/items/${itemId}/weight/auto`, { method: 'POST' });
+        const res = await fetch(`/api/items/${itemId}/weight/auto`, { method: 'POST', signal: ctrl.signal });
         const d = await res.json().catch(() => ({}));
         if (res.ok) {
             const it = allItems.find(i => i.id === itemId);
@@ -1198,10 +1201,13 @@ async function autoWeight(itemId) {
         }
         toast(d.error || 'No se pudo completar el peso', 'warning');
     } catch (err) {
-        toast('Error: ' + err.message, 'error');
+        toast(err.name === 'AbortError'
+            ? 'La consulta tardó demasiado; probá de nuevo'
+            : 'Error: ' + err.message, 'error');
     } finally {
+        clearTimeout(corte);
         const b = document.getElementById(`w-btn-${itemId}`);
-        if (b) { b.disabled = false; if (original) b.innerHTML = original; }
+        if (b) { b.dataset.running = ''; b.disabled = false; b.innerHTML = original; }
     }
 }
 
@@ -1634,7 +1640,7 @@ function renderItems() {
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
-                    ${item.weight == null ? `<button id="w-btn-${item.id}" onclick="autoWeight(${item.id})" class="remove-btn" title="Buscar el peso" style="color:#f9e2af;">⚖️</button>` : ''}
+                    ${item.weight == null ? `<button id="w-btn-${item.id}" onclick="autoWeight(${item.id})" class="remove-btn" title="Buscar el peso" style="color:#89b4fa;">⚖️</button>` : ''}
                     ${item.qty > 1 ? `<button onclick="splitItem(${item.id})" class="remove-btn" title="Dividir en dos" style="color:#cba6f7;">✂️</button>` : ''}
                     ${(item.item_type === 'almacen' && item.status === 'pending') ? `<button id="wh-btn-${item.id}" onclick="sendToWarehouse(${item.id})" class="remove-btn" style="color:#a6e3a1;">🏬</button>` : ''}
                     <button onclick="deleteItem(${item.id}, '${escHtml(item.title.substring(0,40)).replace(/'/g,"\\'")}')" class="remove-btn" title="Eliminar">🗑️</button>

@@ -769,7 +769,7 @@ PROMPT_PESO = (
     'Respondé SOLO este JSON: {{"peso_kg": <numero>}}'
 )
 
-def estimar_peso_ia(title, asin, timeout=20):
+def estimar_peso_ia(title, asin, timeout=12):
     """Peso estimado en kg con Gemini, o None si no se pudo."""
     key = get_gemini_api_key()
     title = (title or '').strip()
@@ -778,9 +778,17 @@ def estimar_peso_ia(title, asin, timeout=20):
     body = _json.dumps({
         'contents': [{'parts': [{'text': PROMPT_PESO.format(title=title[:400], asin=asin or '—')}]}],
         'generationConfig': {'temperature': 0, 'responseMimeType': 'application/json',
-                             'maxOutputTokens': 2048},
+                             'maxOutputTokens': 256,
+                             # sin razonamiento: la respuesta es un número, y con
+                             # thinking el modelo se come el presupuesto y tarda de más
+                             'thinkingConfig': {'thinkingBudget': 0}},
     }).encode()
-    for model in gemini_models():
+    body_simple = _json.dumps({
+        'contents': [{'parts': [{'text': PROMPT_PESO.format(title=title[:400], asin=asin or '—')}]}],
+        'generationConfig': {'temperature': 0, 'responseMimeType': 'application/json',
+                             'maxOutputTokens': 256},
+    }).encode()
+    for model in gemini_models()[:2]:     # el elegido y un respaldo, nada más
         req = urllib.request.Request(
             GEMINI_URL.format(model=model), data=body, method='POST',
             headers={'Content-Type': 'application/json', 'x-goog-api-key': key})
@@ -788,28 +796,44 @@ def estimar_peso_ia(title, asin, timeout=20):
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = _json.loads(resp.read().decode() or '{}')
         except urllib.error.HTTPError as e:
-            if e.code in (404, 400):      # modelo inexistente: probamos el siguiente
+            if e.code == 400:
+                # puede ser que el modelo no acepte thinkingConfig: reintentamos sin eso
+                try:
+                    req2 = urllib.request.Request(
+                        GEMINI_URL.format(model=model), data=body_simple, method='POST',
+                        headers={'Content-Type': 'application/json', 'x-goog-api-key': key})
+                    with urllib.request.urlopen(req2, timeout=timeout) as resp:
+                        data = _json.loads(resp.read().decode() or '{}')
+                except Exception:
+                    continue
+            elif e.code == 404:           # modelo inexistente: probamos el siguiente
                 continue
-            app.logger.warning('gemini %s -> HTTP %s', model, e.code)
-            return None
+            else:
+                app.logger.warning('gemini %s -> HTTP %s', model, e.code)
+                return None
         except Exception as e:
             app.logger.warning('gemini %s falló: %s', model, e)
             return None
 
         try:
             txt = data['candidates'][0]['content']['parts'][0]['text']
+        except Exception:
+            app.logger.warning('gemini %s: respuesta sin texto (%s)', model, str(data)[:200])
+            continue
+        kg = None
+        try:
             kg = float(_json.loads(txt).get('peso_kg'))
         except Exception:
-            m = re.search(r'-?\d+(?:[.,]\d+)?', str(data))
-            if not m:
-                return None
-            try:
-                kg = float(m.group(0).replace(',', '.'))
-            except ValueError:
-                return None
+            m = re.search(r'-?\d+(?:[.,]\d+)?', txt)   # solo sobre el texto del modelo
+            if m:
+                try:
+                    kg = float(m.group(0).replace(',', '.'))
+                except ValueError:
+                    kg = None
+        if kg is None:
+            continue
         if 0.01 <= kg <= 150:
             return round(kg, 2)
-        return None
     return None
 
 def get_warehouse_api_key():
