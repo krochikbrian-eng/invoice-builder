@@ -968,7 +968,7 @@ async function loadWarehouseCfg() {
         if (!el) return;
         el.textContent = d.configured
             ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
-            : 'API key: sin configurar — el botón "Enviar a MeliOS" no va a funcionar';
+            : 'API key: sin configurar — el botón "Enviar MeliOS" no va a funcionar';
         el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
     } catch (e) {}
 }

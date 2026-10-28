@@ -936,7 +936,7 @@
                 if (!el) return;
             el.textContent = d.configured
                 ? (d.from_env ? 'API key: configurada en el servidor (variable de entorno) ✓' : 'API key: configurada ✓')
-                : 'API key: sin configurar — el botón "Enviar a MeliOS" no va a funcionar';
+                : 'API key: sin configurar — el botón "Enviar MeliOS" no va a funcionar';
             el.style.color = d.configured ? '#a6e3a1' : '#f9e2af';
         } catch (e) {}
     }
@@ -1808,7 +1808,7 @@
                             ${(item.item_type === 'almacen' && item.status === 'pending') ? `
                             <button id="wh-btn-${item.id}" onclick="event.stopPropagation(); sendToWarehouse(${item.id})"
                                     class="btn-ghost px-2 py-1 rounded text-xs whitespace-nowrap">
-                                🏬 Enviar a MeliOS
+                                🏬 Enviar MeliOS
                             </button>` : ''}
                         </div>
                         <div class="flex items-center gap-2">
