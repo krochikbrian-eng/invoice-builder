@@ -1470,6 +1470,14 @@ async function loadLastUpload() {
     } catch (e) {}
 }
 
+// Click en cualquier parte libre de la tarjeta del invoice: expande / colapsa los ítems.
+function toggleInvoiceCard(ev, card) {
+    if (ev.target.closest('button, a, input, select, textarea, label, summary, .hist-items')) return;
+    if ((window.getSelection && window.getSelection().toString()) || '') return;
+    const det = card.querySelector('details');
+    if (det) det.open = !det.open;
+}
+
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 function showTab(name) {
     if (!document.getElementById(`tab-${name}`)) name = 'items';
@@ -1954,7 +1962,7 @@ async function loadHistory() {
             const sentBadge = inv.all_sent
                 ? '<span class="badge ml-1" style="background:rgba(166,227,161,0.2);color:#a6e3a1;">Enviado</span>'
                 : '<span class="badge ml-1" style="background:rgba(249,226,175,0.2);color:#f9e2af;">Pendiente</span>';
-            return `<div class="card history-card">
+            return `<div class="card history-card" style="cursor:pointer;" onclick="toggleInvoiceCard(event, this)">
                 <div class="flex items-start justify-between gap-2">
                     <div class="flex-1 min-w-0">
                         <div class="history-title flex flex-wrap items-center gap-1">
@@ -1975,7 +1983,7 @@ async function loadHistory() {
                 </div>
                 <details>
                     <summary>▸ Ver ítems (${inv.items.length})</summary>
-                    <div class="mt-2 space-y-1 pb-1">
+                    <div class="hist-items mt-2 space-y-1 pb-1" style="cursor:default;">
                         ${inv.items.map(i => `
                             <div class="text-xs flex justify-between gap-2 py-1" style="border-bottom:1px solid #1e1e2e;">
                                 ${(i.asin || '').trim()
