@@ -108,16 +108,21 @@
         .btn-ghost:hover { background: rgba(137,180,250,0.16); }
         /* Botones de acción de la fila: todos con la altura del de MeliOS */
         /* Ítems del historial: título, cantidad×precio y peso juntos; "Sacar" a la derecha */
+        /* Los espacios entre columnas los dan los padding (sin column-gap ni anchos mínimos),
+           así la separación precio → subtotal es exactamente 10% más que subtotal → peso. */
         .hist-items { display: grid; grid-template-columns: fit-content(32.2rem) max-content max-content max-content 1fr max-content;
-                      column-gap: 0.75rem; row-gap: 0.25rem; align-items: center; }
+                      column-gap: 0; row-gap: 0.25rem; align-items: center;
+                      --gap-peso: 1.5rem; --gap-subtotal: calc(var(--gap-peso) * 1.1); }
         .hist-item-row { display: contents; }
         .hist-items .hist-title { justify-self: start; max-width: 100%; }   /* el link mide lo que el texto */
-        .hist-items .hist-price { padding-left: 2.5rem; text-align: right; }
-        .hist-items .hist-subtotal { min-width: 5rem; text-align: right; }
-        .hist-items .hist-weight { min-width: 3.5rem; text-align: right; }
+        .hist-items .hist-price { padding-left: 3.25rem; text-align: right; }
+        .hist-items .hist-subtotal { padding-left: var(--gap-subtotal); text-align: right; }
+        .hist-items .hist-weight { padding-left: var(--gap-peso); text-align: right; }
+        .hist-items .hist-sacar { margin-left: 0.75rem; }
         @media (max-width: 900px) {
-            .hist-items { grid-template-columns: minmax(0, 1fr) max-content max-content max-content 0 max-content; }
-            .hist-items .hist-price { padding-left: 0.5rem; }
+            .hist-items { grid-template-columns: minmax(0, 1fr) max-content max-content max-content 0 max-content;
+                          --gap-peso: 0.6rem; }
+            .hist-items .hist-price { padding-left: 0.6rem; }
         }
         .row-btn { height: 26px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 
@@ -2602,7 +2607,7 @@
                                 <span class="hist-subtotal tabular-nums whitespace-nowrap text-gray-300">$${(i.qty * (i.price_final != null ? i.price_final : i.price)).toFixed(2)}</span>
                                 <span class="hist-weight tabular-nums whitespace-nowrap text-gray-500">${i.weight != null ? Number(i.weight) + ' kg' : ''}</span>
                                 <span></span>
-                                <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
+                                <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="hist-sacar text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors whitespace-nowrap" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>
                             </div>
                         `).join('')}
                     </div>
