@@ -2570,7 +2570,10 @@
                     <div class="mt-2 space-y-1">
                         ${inv.items.map(i => `
                             <div class="text-xs text-gray-400 flex justify-between items-center gap-2">
-                                <span class="truncate max-w-sm copyable" title="Click para copiar" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>
+                                ${(i.asin || '').trim()
+                                    ? `<a href="https://www.amazon.com/dp/${encodeURIComponent(i.asin.trim())}" target="_blank" rel="noopener"
+                                          class="truncate max-w-sm hover:text-orange-300 hover:underline transition-colors">${escHtml(i.title.substring(0, 60))}</a>`
+                                    : `<span class="truncate max-w-sm copyable" onclick="copyText('${escAttr(i.title)}', 'Título')">${escHtml(i.title.substring(0, 60))}</span>`}
                                 <span class="flex items-center gap-2 shrink-0">
                                     <span class="tabular-nums">${i.qty} × $${i.price.toFixed(2)}</span>
                                     <button onclick="removeItemFromInvoice(${i.id}, '${escAttr(i.title.substring(0, 40))}')" class="text-red-400/70 hover:text-red-300 hover:bg-red-400/10 rounded px-1.5 py-0.5 transition-colors" title="Sacar este ítem del envío y devolverlo a Pendiente">✕ Sacar</button>

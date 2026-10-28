@@ -1978,7 +1978,9 @@ async function loadHistory() {
                     <div class="mt-2 space-y-1 pb-1">
                         ${inv.items.map(i => `
                             <div class="text-xs flex justify-between gap-2 py-1" style="border-bottom:1px solid #1e1e2e;">
-                                <span class="flex-1" style="color:#a6adc8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(i.title.substring(0,55))}${i.title.length>55?'…':''}</span>
+                                ${(i.asin || '').trim()
+                                    ? `<a href="https://www.amazon.com/dp/${encodeURIComponent(i.asin.trim())}" target="_blank" rel="noopener" class="flex-1" style="color:#89b4fa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none;">${escHtml(i.title.substring(0,55))}${i.title.length>55?'…':''}</a>`
+                                    : `<span class="flex-1" style="color:#a6adc8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(i.title.substring(0,55))}${i.title.length>55?'…':''}</span>`}
                                 <span style="color:#585b70; white-space:nowrap;">${i.qty}×$${i.price.toFixed(2)}</span>
                             </div>
                         `).join('')}
