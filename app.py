@@ -544,6 +544,13 @@ def init_db():
         )
     """)
     conn.commit()
+    # Migration: si el ítem salió de dividir otro, el id del ítem original (raíz).
+    # Sirve para listarlo justo debajo del original.
+    try:
+        conn.execute("ALTER TABLE items ADD COLUMN split_from INTEGER")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
     # Migration: fecha en que el ítem se mandó al Almacén externo (NULL = nunca)
     try:
         conn.execute("ALTER TABLE items ADD COLUMN warehouse_at TEXT")
@@ -1727,7 +1734,7 @@ def get_items():
         FROM items i
         LEFT JOIN invoices inv ON i.invoice_id = inv.id
         WHERE i.company = ?
-        ORDER BY i.created_at DESC
+        ORDER BY i.created_at DESC, COALESCE(i.split_from, i.id) ASC, i.id ASC
     """, (company,)).fetchall()
 
     # Count items per order_id for badge
@@ -1809,12 +1816,15 @@ def split_partial_item(conn, row, qty_usada):
     # Y el sobrante vuelve a la lista como un ítem aparte, igual pero pendiente
     cur = conn.execute("""
         INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status,
-                           total_neto, tracking, status, company, item_type, weight, invoice_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NULL)
+                           total_neto, tracking, status, company, item_type, weight, invoice_id,
+                           created_at, split_from)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NULL, ?, ?)
     """, (val('order_id', ''), val('asin', ''), val('title', ''), precio, resto,
           val('po'), val('order_date', ''), val('order_status', ''),
           round(precio * resto, 2), val('tracking', ''), val('company', 'zero'),
-          val('item_type', 'comercial') or 'comercial', val('weight')))
+          val('item_type', 'comercial') or 'comercial', val('weight'),
+          val('created_at') or datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+          val('split_from') or row['id']))
     return cur.lastrowid
 
 @app.route('/api/generate', methods=['POST'])
@@ -2925,13 +2935,16 @@ def split_item(item_id):
                  (qty_original, round(precio * qty_original, 2), item_id))
     cur = conn.execute("""
         INSERT INTO items (order_id, asin, title, price, qty, po, order_date, order_status,
-                           total_neto, tracking, status, company, item_type, weight, invoice_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           total_neto, tracking, status, company, item_type, weight, invoice_id,
+                           created_at, split_from)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (val('order_id', ''), val('asin', ''), val('title', ''), precio, qty_nuevo,
           val('po'), val('order_date', ''), val('order_status', ''),
           round(precio * qty_nuevo, 2), val('tracking', ''), val('status', 'pending'),
           val('company', 'zero'), val('item_type', 'comercial') or 'comercial',
-          val('weight'), val('invoice_id')))
+          val('weight'), val('invoice_id'),
+          val('created_at') or datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+          val('split_from') or row['id']))
     nuevo_id = cur.lastrowid
 
     # El monto de la factura no cambia (misma cantidad total), pero ahora hay una fila más
