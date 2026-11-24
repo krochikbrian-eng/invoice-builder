@@ -1601,11 +1601,6 @@ function renderItems() {
     const typeFilter = document.getElementById('filter-type')?.value || 'all';
     const list = document.getElementById('items-list');
 
-    // Pending counter in title
-    const pendingCount = allItems.filter(i => i.status === 'pending').length;
-    const counterEl = document.getElementById('pending-count');
-    if (counterEl) counterEl.textContent = `(${pendingCount})`;
-
     const filtered = allItems.filter(item => {
         if (statusFilter !== 'all' && item.status !== statusFilter) return false;
         if (typeFilter !== 'all' && (item.item_type || 'comercial') !== typeFilter) return false;
@@ -1614,6 +1609,10 @@ function renderItems() {
             !(item.asin && item.asin.toLowerCase().includes(search))) return false;
         return true;
     });
+
+    // El número del título refleja lo que se ve con los filtros actuales
+    const counterEl = document.getElementById('pending-count');
+    if (counterEl) counterEl.textContent = `(${filtered.length})`;
 
     if (filtered.length === 0) {
         list.innerHTML = `<div class="empty-state">

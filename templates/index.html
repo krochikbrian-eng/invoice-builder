@@ -1728,11 +1728,11 @@
         return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
     }
 
-    function renderStats() {
+    // El número del título refleja lo que se ve con los filtros actuales
+    function renderStats(visibles) {
         const el = document.getElementById('pending-count');
         if (!el) return;
-        const pendingCount = allItems.filter(i => i.status === 'pending').length;
-        el.textContent = `(${pendingCount})`;
+        el.textContent = `(${visibles != null ? visibles : allItems.filter(i => i.status === 'pending').length})`;
     }
 
     function renderItems() {
@@ -1741,8 +1741,6 @@
         const typeFilter = document.getElementById('filter-type')?.value || 'all';
         const sortBy = document.getElementById('sort-items')?.value || 'default';
         const list = document.getElementById('items-list');
-
-        renderStats();
 
         let filtered = allItems.filter(item => {
             if (statusFilter !== 'all' && item.status !== statusFilter) return false;
@@ -1763,6 +1761,7 @@
         };
         if (sorters[sortBy]) filtered = [...filtered].sort(sorters[sortBy]);
         filteredItems = filtered; // lo que se ve ahora (para "Seleccionar todo")
+        renderStats(filtered.length);
         renderBulkBar();          // depende de filteredItems, por eso va después
 
         const countEl = document.getElementById('filtered-count');
