@@ -65,7 +65,8 @@ CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 # ─── Company ────────────────────────────────────────────────────────────────
 VALID_COMPANIES = ('zero', 'lime')
 # Tipos de ítem, en el orden en que se muestran en la UI
-ITEM_TYPES = ('comercial', 'personal', 'especial', 'almacen', 'revisar')
+ITEM_TYPES = ('comercial', 'personal', 'especial', 'almacen', 'revisar',
+              'ale_a', 'ale_esp', 'brian_a', 'brian_esp')
 COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
 # Etiquetas cortas, iguales a las del switch de empresa en la UI
 COMPANY_UI_NAMES = {'zero': 'Zero', 'lime': 'Limesquare'}

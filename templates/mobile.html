@@ -290,6 +290,10 @@
             <option value="especial">⭐ Especial</option>
             <option value="almacen">🏬 Almacén</option>
             <option value="revisar">🔎 Revisar</option>
+            <option value="ale_a">🏷️ Ale A</option>
+            <option value="ale_esp">🏷️ Ale Esp</option>
+            <option value="brian_a">🏷️ Brian A</option>
+            <option value="brian_esp">🏷️ Brian Esp</option>
         </select>
         <div class="flex gap-3">
             <button onclick="closeManualItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
@@ -326,6 +330,10 @@
             <option value="especial">⭐ Especial</option>
             <option value="almacen">🏬 Almacén</option>
             <option value="revisar">🔎 Revisar</option>
+            <option value="ale_a">🏷️ Ale A</option>
+            <option value="ale_esp">🏷️ Ale Esp</option>
+            <option value="brian_a">🏷️ Brian A</option>
+            <option value="brian_esp">🏷️ Brian Esp</option>
         </select>
         <div class="flex gap-3">
             <button onclick="closeEditItemModal()" class="flex-1 py-3 rounded-xl text-sm border border-gray-600 text-gray-300 active:bg-gray-700">Cancelar</button>
@@ -409,6 +417,10 @@
                     <option value="especial">⭐ Especial</option>
                     <option value="almacen">🏬 Almacén</option>
                     <option value="revisar">🔎 Revisar</option>
+                    <option value="ale_a">🏷️ Ale A</option>
+                    <option value="ale_esp">🏷️ Ale Esp</option>
+                    <option value="brian_a">🏷️ Brian A</option>
+                    <option value="brian_esp">🏷️ Brian Esp</option>
                 </select>
             </div>
 
@@ -1647,6 +1659,10 @@ function renderItems() {
                     <option value="especial" ${item.item_type==='especial'?'selected':''}>⭐ Especial</option>
                     <option value="almacen" ${item.item_type==='almacen'?'selected':''}>🏬 Almacén</option>
                     <option value="revisar" ${item.item_type==='revisar'?'selected':''}>🔎 Revisar</option>
+                    <option value="ale_a" ${item.item_type==='ale_a'?'selected':''}>🏷️ Ale A</option>
+                    <option value="ale_esp" ${item.item_type==='ale_esp'?'selected':''}>🏷️ Ale Esp</option>
+                    <option value="brian_a" ${item.item_type==='brian_a'?'selected':''}>🏷️ Brian A</option>
+                    <option value="brian_esp" ${item.item_type==='brian_esp'?'selected':''}>🏷️ Brian Esp</option>
                 </select>
                 <div class="flex items-center gap-2 ml-2">
                     <button onclick="openEditItemModal(${item.id})" class="remove-btn" title="Editar título y tracking" style="color:#89b4fa;">✏️</button>
@@ -1667,16 +1683,21 @@ function getDiscount() {
 }
 
 // ─── Box ──────────────────────────────────────────────────────────────────
+// Las etiquetas (Ale A, Ale Esp, Brian A, Brian Esp) se pueden mezclar entre sí en un
+// mismo envío; el resto de los tipos sigue sin poder mezclarse con nada distinto.
+const ETIQUETAS = ['ale_a', 'ale_esp', 'brian_a', 'brian_esp'];
+function typeGroup(t) { return ETIQUETAS.includes(t) ? 'etiqueta' : (t || 'comercial'); }
+function sameGroup(a, b) { return typeGroup(a) === typeGroup(b); }
 function boxType() {
     for (const { item } of boxItems.values()) return item.item_type || 'comercial';
     return null;
 }
 function typeIcon(t) {
-    return {comercial:'🏢', personal:'👤', especial:'⭐', almacen:'🏬', revisar:'🔎'}[t] || '🏢';
+    return {comercial:'🏢', personal:'👤', especial:'⭐', almacen:'🏬', revisar:'🔎', ale_a:'🏷️', ale_esp:'🏷️', brian_a:'🏷️', brian_esp:'🏷️'}[t] || '🏢';
 }
 function typeLabel(t) {
     return {comercial:'COMERCIAL', personal:'PERSONAL', especial:'ESPECIAL',
-            almacen:'ALMACÉN', revisar:'REVISAR'}[t] || 'COMERCIAL';
+            almacen:'ALMACÉN', revisar:'REVISAR', ale_a:'ALE A', ale_esp:'ALE ESP', brian_a:'BRIAN A', brian_esp:'BRIAN ESP'}[t] || 'COMERCIAL';
 }
 
 function addToBox(itemId) {
@@ -1685,7 +1706,7 @@ function addToBox(itemId) {
     if (!item || item.status !== 'pending') return;
     const itType = item.item_type || 'comercial';
     const bt = boxType();
-    if (bt && bt !== itType) {
+    if (bt && !sameGroup(bt, itType)) {
         confirmDialog({
             title: `Envío ${typeLabel(bt)}`,
             message: `Este envío es ${typeLabel(bt)}.\n\nNo se pueden mezclar tipos distintos en el mismo envío. Vaciá la caja antes de agregar ítems ${typeLabel(itType)}.`,
@@ -2088,7 +2109,7 @@ async function changeItemType(itemId, newType) {
         if (res.ok) {
             const it = allItems.find(i => i.id === itemId);
             if (it) it.item_type = newType;
-            toast({comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar'}[newType] || newType, 'success');
+            toast({comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar', ale_a:'🏷️ Ale A', ale_esp:'🏷️ Ale Esp', brian_a:'🏷️ Brian A', brian_esp:'🏷️ Brian Esp'}[newType] || newType, 'success');
             renderItems();   // el botón del Almacén depende del tipo
         } else {
             toast(data.error || 'Error al cambiar tipo', 'error');
