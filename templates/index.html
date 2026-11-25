@@ -136,7 +136,8 @@
 
         input, select { color-scheme: dark; }
         /* Select compacto con flecha propia (la nativa quedaba cortada contra el borde) */
-        .pill-select {
+        /* .field usa el shorthand "background", que borraría la flecha: por eso va con más especificidad */
+        .field.pill-select {
             -webkit-appearance: none; appearance: none;
             padding-left: 0.5rem; padding-right: 1.6rem;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2389b4fa' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
