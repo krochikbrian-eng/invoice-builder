@@ -75,10 +75,10 @@ DEFAULT_ITEM_TYPES = [
     {'key': 'especial',  'label': 'Especial',  'emoji': '⭐', 'mezclable': False},
     {'key': 'almacen',   'label': 'Almacén',   'emoji': '🏬', 'mezclable': False, 'sistema': True},
     {'key': 'revisar',   'label': 'Revisar',   'emoji': '🔎', 'mezclable': False},
-    {'key': 'ale_a',     'label': 'Ale A',     'emoji': '🏷️', 'mezclable': True},
-    {'key': 'ale_esp',   'label': 'Ale Esp',   'emoji': '🏷️', 'mezclable': True},
-    {'key': 'brian_a',   'label': 'Brian A',   'emoji': '🏷️', 'mezclable': True},
-    {'key': 'brian_esp', 'label': 'Brian Esp', 'emoji': '🏷️', 'mezclable': True},
+    {'key': 'ale_a',     'label': 'Ale A',     'emoji': '🏷️', 'mezclable': False},
+    {'key': 'ale_esp',   'label': 'Ale Esp',   'emoji': '🏷️', 'mezclable': False},
+    {'key': 'brian_a',   'label': 'Brian A',   'emoji': '🏷️', 'mezclable': False},
+    {'key': 'brian_esp', 'label': 'Brian Esp', 'emoji': '🏷️', 'mezclable': False},
 ]
 SYSTEM_ITEM_TYPES = ('comercial', 'almacen')
 
@@ -3280,6 +3280,29 @@ def add_item_type():
     cfg['item_types'] = [{k: v for k, v in t.items() if k in ('key', 'label', 'emoji', 'mezclable')} for t in tipos]
     save_config(cfg)
     return jsonify({'types': get_item_types(), 'key': key})
+
+@app.route('/api/config/item-types/<key>', methods=['PUT'])
+def update_item_type_cfg(key):
+    data = request.get_json() or {}
+    tipos = get_item_types()
+    t = next((x for x in tipos if x['key'] == key), None)
+    if t is None:
+        return jsonify({'error': 'Ese tipo no existe'}), 404
+    if 'mezclable' in data:
+        t['mezclable'] = bool(data['mezclable'])
+    if 'label' in data:
+        label = str(data['label']).strip()[:30]
+        if not label:
+            return jsonify({'error': 'El nombre no puede quedar vacío'}), 400
+        if any(x['key'] != key and x['label'].strip().lower() == label.lower() for x in tipos):
+            return jsonify({'error': f'Ya existe un tipo llamado "{label}"'}), 400
+        t['label'] = label
+    if 'emoji' in data:
+        t['emoji'] = str(data['emoji']).strip()[:4] or '🏷️'
+    cfg = load_config()
+    cfg['item_types'] = [{k: v for k, v in x.items() if k in ('key', 'label', 'emoji', 'mezclable')} for x in tipos]
+    save_config(cfg)
+    return jsonify({'types': get_item_types()})
 
 @app.route('/api/config/item-types/<key>', methods=['DELETE'])
 def delete_item_type(key):

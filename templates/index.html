@@ -594,7 +594,8 @@
                     <h3 class="text-sm font-semibold text-gray-300 mb-1">🏷️ Tipos y etiquetas</h3>
                     <p class="text-xs text-gray-500 mb-3">
                         Los tipos que aparecen en los desplegables de cada ítem y de cada PO.
-                        Los marcados <span class="text-purple-300">mezclables</span> se pueden juntar entre sí en un mismo envío.
+                        Los marcados <span class="text-purple-300">mezclables</span> se pueden juntar entre sí en un mismo envío;
+                        tocá <span class="text-gray-400">⇄</span> en cada uno para cambiarlo.
                     </p>
                     <div id="types-list" class="flex flex-wrap gap-2 mb-3"></div>
                     <div class="flex gap-2 items-center flex-wrap">
@@ -913,7 +914,13 @@
                          ${t.mezclable ? 'bg-purple-500/15 text-purple-200 border-purple-500/30' : 'bg-blue-500/15 text-blue-200 border-blue-500/30'}"
                   title="${t.usos != null ? t.usos + ' ítem(s) con este tipo' : ''}">
                 ${escHtml(t.emoji)} ${escHtml(t.label)}
-                ${t.mezclable ? '<span class="text-[10px] uppercase tracking-wide text-purple-300/80">mezclable</span>' : ''}
+                <button onclick="toggleMezclable('${escAttr(t.key)}')"
+                        class="text-[10px] uppercase tracking-wide rounded-full px-1.5 py-0.5 border transition-colors
+                               ${t.mezclable ? 'text-purple-200 border-purple-400/50 bg-purple-500/20 hover:bg-purple-500/30'
+                                             : 'text-gray-500 border-gray-600/50 hover:text-gray-300 hover:border-gray-400/60'}"
+                        title="${t.mezclable ? 'Mezclable: click para que NO se pueda mezclar' : 'No se mezcla: click para hacerlo mezclable'}">
+                    ${t.mezclable ? '⇄ mezclable' : '⇄'}
+                </button>
                 ${t.sistema
                     ? '<span class="text-[10px] text-gray-500 px-1" title="Tipo del sistema, no se puede borrar">🔒</span>'
                     : `<button onclick="deleteItemType('${escAttr(t.key)}')" class="text-gray-400/60 hover:text-red-400 transition-colors px-1">&times;</button>`}
@@ -944,6 +951,19 @@
         await loadItemTypes();
         aplicarTiposNuevos(ITEM_TYPES_CFG);
         toast(`Tipo "${label}" agregado`, 'success');
+    }
+    async function toggleMezclable(key) {
+        const t = tipoCfg(key);
+        if (!t) return;
+        const res = await fetch(`/api/config/item-types/${encodeURIComponent(key)}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mezclable: !t.mezclable })
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(d.error || 'No se pudo cambiar', 'error'); return; }
+        await loadItemTypes();
+        aplicarTiposNuevos(ITEM_TYPES_CFG);
+        toast(`${t.label}: ${!t.mezclable ? 'ahora se puede mezclar' : 'ya no se mezcla con otros tipos'}`, 'success');
     }
     async function deleteItemType(key) {
         const t = tipoCfg(key);
