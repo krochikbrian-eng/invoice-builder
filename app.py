@@ -65,8 +65,47 @@ CONFIG_PATH = os.path.join(DATA_DIR, 'config.json')
 # ─── Company ────────────────────────────────────────────────────────────────
 VALID_COMPANIES = ('zero', 'lime')
 # Tipos de ítem, en el orden en que se muestran en la UI
-ITEM_TYPES = ('comercial', 'personal', 'especial', 'almacen', 'revisar',
-              'ale_a', 'ale_esp', 'brian_a', 'brian_esp')
+# Tipos de ítem por defecto. La lista real se edita desde Configuración y se
+# guarda en config.json ('item_types'). 'sistema' = no se puede borrar
+# (comercial es el tipo por defecto y almacen activa el botón de MeliOS).
+# 'mezclable' = se puede mezclar en un mismo envío con otros tipos mezclables.
+DEFAULT_ITEM_TYPES = [
+    {'key': 'comercial', 'label': 'Comercial', 'emoji': '🏢', 'mezclable': False, 'sistema': True},
+    {'key': 'personal',  'label': 'Personal',  'emoji': '👤', 'mezclable': False},
+    {'key': 'especial',  'label': 'Especial',  'emoji': '⭐', 'mezclable': False},
+    {'key': 'almacen',   'label': 'Almacén',   'emoji': '🏬', 'mezclable': False, 'sistema': True},
+    {'key': 'revisar',   'label': 'Revisar',   'emoji': '🔎', 'mezclable': False},
+    {'key': 'ale_a',     'label': 'Ale A',     'emoji': '🏷️', 'mezclable': True},
+    {'key': 'ale_esp',   'label': 'Ale Esp',   'emoji': '🏷️', 'mezclable': True},
+    {'key': 'brian_a',   'label': 'Brian A',   'emoji': '🏷️', 'mezclable': True},
+    {'key': 'brian_esp', 'label': 'Brian Esp', 'emoji': '🏷️', 'mezclable': True},
+]
+SYSTEM_ITEM_TYPES = ('comercial', 'almacen')
+
+def get_item_types():
+    """Lista de tipos de ítem configurada (o la de fábrica)."""
+    try:
+        tipos = load_config().get('item_types')
+    except Exception:
+        tipos = None
+    if not isinstance(tipos, list) or not tipos:
+        tipos = [dict(t) for t in DEFAULT_ITEM_TYPES]
+    out, vistos = [], set()
+    for t in tipos:
+        if not isinstance(t, dict) or not t.get('key') or t['key'] in vistos:
+            continue
+        vistos.add(t['key'])
+        out.append({'key': str(t['key']), 'label': str(t.get('label') or t['key']),
+                    'emoji': str(t.get('emoji') or '🏷️'), 'mezclable': bool(t.get('mezclable')),
+                    'sistema': t['key'] in SYSTEM_ITEM_TYPES})
+    for k in SYSTEM_ITEM_TYPES:            # los de sistema siempre existen
+        if k not in vistos:
+            base = next(d for d in DEFAULT_ITEM_TYPES if d['key'] == k)
+            out.insert(0 if k == 'comercial' else len(out), dict(base, sistema=True))
+    return out
+
+def item_type_keys():
+    return tuple(t['key'] for t in get_item_types())
 COMPANY_NAMES = {'zero': 'Zero International', 'lime': 'Lime Square LLC'}
 # Etiquetas cortas, iguales a las del switch de empresa en la UI
 COMPANY_UI_NAMES = {'zero': 'Zero', 'lime': 'Limesquare'}
@@ -162,7 +201,7 @@ def _migrate_config(cfg):
     if 'companies' not in cfg:
         flat = {k: cfg[k] for k in _COMPANY_KEYS if k in cfg}
         flat.setdefault('accepted_pos', list(DEFAULT_CONFIG['accepted_pos']))
-        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key', 'gemini_api_key', 'gemini_model') if k in cfg}
+        globals_kept = {k: cfg[k] for k in ('tracking_api_key', 'warehouse_api_key', 'gemini_api_key', 'gemini_model', 'item_types') if k in cfg}
         cfg = {'companies': {'zero': flat}, **globals_kept}
     cfg.setdefault('companies', {})
     for comp in VALID_COMPANIES:
@@ -249,12 +288,12 @@ def csv_account_emails(text):
     return found
 
 def get_po_types(company=None):
-    """Mapping PO -> item type (ver ITEM_TYPES) for CSV imports."""
+    """Mapping PO -> item type (ver get_item_types) for CSV imports."""
     raw = company_cfg(company).get('po_types', {}) or {}
     out = {}
     for po, t in raw.items():
         t = str(t).strip().lower()
-        if t in ITEM_TYPES:
+        if t in item_type_keys():
             out[str(po).strip()] = t
     return out
 
@@ -1604,8 +1643,8 @@ def is_mobile():
 @app.route('/')
 def index():
     if is_mobile():
-        return render_template('mobile.html')
-    return render_template('index.html')
+        return render_template('mobile.html', item_types=get_item_types())
+    return render_template('index.html', item_types=get_item_types())
 
 @app.route('/api/upload', methods=['POST'])
 def upload_csv():
@@ -1672,7 +1711,7 @@ def upload_csv():
         }), 400
 
     # Save to DB, skip duplicates
-    po_type_map = get_po_types(company)   # PO -> tipo de ítem (ver ITEM_TYPES)
+    po_type_map = get_po_types(company)   # PO -> tipo de ítem (ver get_item_types)
     conn = get_db()
     saved = 0
     skipped = 0
@@ -2618,7 +2657,7 @@ def update_item_fields(item_id):
         sets.append('qty = ?'); params.append(qty); new_qty = qty
     if 'item_type' in data:
         it = str(data.get('item_type', '')).strip().lower()
-        if it not in ITEM_TYPES:
+        if it not in item_type_keys():
             conn.close(); return jsonify({'error': 'Tipo inválido'}), 400
         sets.append('item_type = ?'); params.append(it)
     if 'weight' in data:
@@ -2644,7 +2683,7 @@ def update_item_type(item_id):
     """Change an item's type (comercial/personal)."""
     data = request.json or {}
     new_type = str(data.get('item_type', '')).strip().lower()
-    if new_type not in ITEM_TYPES:
+    if new_type not in item_type_keys():
         return jsonify({'error': 'Tipo inválido'}), 400
     conn = get_db()
     if conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
@@ -2693,7 +2732,7 @@ def add_manual_item():
         return jsonify({'error': 'El costo no puede ser negativo'}), 400
     company = get_company()
     item_type = str(data.get('item_type', 'comercial')).strip().lower()
-    if item_type not in ITEM_TYPES:
+    if item_type not in item_type_keys():
         item_type = 'comercial'
     try:
         weight = parse_weight(data.get('weight'))
@@ -3202,6 +3241,69 @@ def get_po_config():
     company = get_company()
     return jsonify({'pos': get_accepted_pos(company), 'types': get_po_types(company)})
 
+@app.route('/api/config/item-types', methods=['GET'])
+def list_item_types():
+    """Tipos de ítem configurados, con cuántos ítems usan cada uno."""
+    conn = get_db()
+    usos = {r['item_type']: r['c'] for r in conn.execute(
+        "SELECT item_type, COUNT(*) c FROM items GROUP BY item_type").fetchall()}
+    conn.close()
+    tipos = get_item_types()
+    for t in tipos:
+        t['usos'] = usos.get(t['key'], 0)
+    return jsonify({'types': tipos})
+
+def _slug_tipo(label, existentes):
+    import unicodedata
+    base = unicodedata.normalize('NFKD', label)
+    base = ''.join(ch for ch in base if not unicodedata.combining(ch)).lower()
+    base = re.sub(r'[^a-z0-9]+', '_', base).strip('_')[:30] or 'tipo'
+    key, n = base, 2
+    while key in existentes:
+        key, n = f'{base}_{n}', n + 1
+    return key
+
+@app.route('/api/config/item-types', methods=['POST'])
+def add_item_type():
+    data = request.get_json() or {}
+    label = str(data.get('label', '')).strip()[:30]
+    if not label:
+        return jsonify({'error': 'Poné un nombre para el tipo'}), 400
+    emoji = str(data.get('emoji', '')).strip()[:4] or '🏷️'
+    tipos = get_item_types()
+    if any(t['label'].strip().lower() == label.lower() for t in tipos):
+        return jsonify({'error': f'Ya existe un tipo llamado "{label}"'}), 400
+    key = _slug_tipo(label, {t['key'] for t in tipos})
+    tipos.append({'key': key, 'label': label, 'emoji': emoji,
+                  'mezclable': bool(data.get('mezclable')), 'sistema': False})
+    cfg = load_config()
+    cfg['item_types'] = [{k: v for k, v in t.items() if k in ('key', 'label', 'emoji', 'mezclable')} for t in tipos]
+    save_config(cfg)
+    return jsonify({'types': get_item_types(), 'key': key})
+
+@app.route('/api/config/item-types/<key>', methods=['DELETE'])
+def delete_item_type(key):
+    """Borra un tipo. Los ítems que lo usaban pasan a Comercial y los PO que
+    apuntaban a él vuelven al tipo por defecto."""
+    if key in SYSTEM_ITEM_TYPES:
+        return jsonify({'error': 'Ese tipo es del sistema y no se puede borrar'}), 400
+    tipos = get_item_types()
+    if not any(t['key'] == key for t in tipos):
+        return jsonify({'error': 'Ese tipo no existe'}), 404
+    conn = get_db()
+    movidos = conn.execute("UPDATE items SET item_type = 'comercial' WHERE item_type = ?", (key,)).rowcount
+    conn.commit()
+    conn.close()
+    cfg = load_config()
+    cfg['item_types'] = [{k: v for k, v in t.items() if k in ('key', 'label', 'emoji', 'mezclable')}
+                         for t in tipos if t['key'] != key]
+    for comp in cfg.get('companies', {}).values():          # PO -> tipo borrado
+        pt = comp.get('po_types') or {}
+        for po in [p for p, t in pt.items() if t == key]:
+            pt.pop(po, None)
+    save_config(cfg)
+    return jsonify({'types': get_item_types(), 'items_movidos': movidos})
+
 @app.route('/api/config/account-emails', methods=['GET'])
 def get_account_emails_config():
     company = get_company()
@@ -3272,7 +3374,7 @@ def set_po_config():
         for po, t in data['types'].items():
             po = str(po).strip()
             t = str(t).strip().lower()
-            if po in pos and t in ITEM_TYPES:
+            if po in pos and t in item_type_keys():
                 types[po] = t
         full['companies'][company]['po_types'] = types
     save_config(full)

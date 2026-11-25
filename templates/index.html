@@ -135,6 +135,13 @@
         .btn-hist:active { transform: scale(.985); }
 
         input, select { color-scheme: dark; }
+        /* Select compacto con flecha propia (la nativa quedaba cortada contra el borde) */
+        .pill-select {
+            -webkit-appearance: none; appearance: none;
+            padding-left: 0.5rem; padding-right: 1.6rem;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2389b4fa' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 10px;
+        }
         .field {
             background: var(--surface-2); border: 1px solid var(--border); border-radius: 0.5rem;
             transition: border-color .15s ease, box-shadow .15s ease;
@@ -280,16 +287,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
-                        <select id="mi-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
-                            <option value="comercial">🏢 Comercial</option>
-                            <option value="personal">👤 Personal</option>
-                            <option value="especial">⭐ Especial</option>
-                            <option value="almacen">🏬 Almacén</option>
-                            <option value="revisar">🔎 Revisar</option>
-                            <option value="ale_a">🏷️ Ale A</option>
-                            <option value="ale_esp">🏷️ Ale Esp</option>
-                            <option value="brian_a">🏷️ Brian A</option>
-                            <option value="brian_esp">🏷️ Brian Esp</option>
+                        <select id="mi-type" data-type-select class="field w-full px-3 py-2 text-sm cursor-pointer">
                         </select>
                     </div>
                 </div>
@@ -339,16 +337,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-xs text-gray-400 block mb-1">Tipo</label>
-                        <select id="ei-type" class="field w-full px-3 py-2 text-sm cursor-pointer">
-                            <option value="comercial">🏢 Comercial</option>
-                            <option value="personal">👤 Personal</option>
-                            <option value="especial">⭐ Especial</option>
-                            <option value="almacen">🏬 Almacén</option>
-                            <option value="revisar">🔎 Revisar</option>
-                            <option value="ale_a">🏷️ Ale A</option>
-                            <option value="ale_esp">🏷️ Ale Esp</option>
-                            <option value="brian_a">🏷️ Brian A</option>
-                            <option value="brian_esp">🏷️ Brian Esp</option>
+                        <select id="ei-type" data-type-select class="field w-full px-3 py-2 text-sm cursor-pointer">
                         </select>
                     </div>
                 </div>
@@ -477,17 +466,8 @@
                             <option value="invoiced">Facturado</option>
                             <option value="sent">Enviado</option>
                         </select>
-                        <select id="filter-type" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
+                        <select id="filter-type" data-type-select data-con-todos class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
                             <option value="all" selected>Todos</option>
-                            <option value="comercial">🏢 Comercial</option>
-                            <option value="personal">👤 Personal</option>
-                            <option value="especial">⭐ Especial</option>
-                            <option value="almacen">🏬 Almacén</option>
-                            <option value="revisar">🔎 Revisar</option>
-                            <option value="ale_a">🏷️ Ale A</option>
-                            <option value="ale_esp">🏷️ Ale Esp</option>
-                            <option value="brian_a">🏷️ Brian A</option>
-                            <option value="brian_esp">🏷️ Brian Esp</option>
                         </select>
                         <select id="sort-items" class="field px-3 py-1.5 text-sm cursor-pointer" onchange="filterItems()">
                             <option value="default">Orden original</option>
@@ -605,6 +585,27 @@
                                class="field flex-1 px-3 py-2 text-sm"
                                onkeydown="if(event.key==='Enter')addPO()">
                         <button onclick="addPO()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">+ Agregar</button>
+                    </div>
+                </div>
+
+                <!-- Tipos / etiquetas -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-1">🏷️ Tipos y etiquetas</h3>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Los tipos que aparecen en los desplegables de cada ítem y de cada PO.
+                        Los marcados <span class="text-purple-300">mezclables</span> se pueden juntar entre sí en un mismo envío.
+                    </p>
+                    <div id="types-list" class="flex flex-wrap gap-2 mb-3"></div>
+                    <div class="flex gap-2 items-center flex-wrap">
+                        <input type="text" id="new-type-emoji" placeholder="🏷️" maxlength="4"
+                               class="field w-14 px-2 py-2 text-sm text-center">
+                        <input type="text" id="new-type-label" placeholder="Nombre del tipo..." maxlength="30"
+                               class="field flex-1 min-w-[10rem] px-3 py-2 text-sm"
+                               onkeydown="if(event.key==='Enter')addItemType()">
+                        <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+                            <input type="checkbox" id="new-type-mezclable"> Mezclable
+                        </label>
+                        <button onclick="addItemType()" class="btn-primary px-4 py-2 rounded-md text-sm font-medium">+ Agregar</button>
                     </div>
                 </div>
 
@@ -758,6 +759,26 @@
     </main>
 
     <script>
+    // ─── Tipos de ítem (configurables desde Configuración) ──────────────
+    // Los manda el servidor al renderizar la página; se actualizan al editarlos.
+    var ITEM_TYPES_CFG = {{ item_types | tojson }};
+    function tipoCfg(k) { return ITEM_TYPES_CFG.find(t => t.key === k); }
+    function typeDisplay(k) { const t = tipoCfg(k); return t ? `${t.emoji} ${t.label}` : (k || ''); }
+    function typeOptionsHtml(sel) {
+        return ITEM_TYPES_CFG.map(t =>
+            `<option value="${escHtml(t.key)}" ${t.key === sel ? 'selected' : ''}>${escHtml(t.emoji)} ${escHtml(t.label)}</option>`
+        ).join('');
+    }
+    // Llena los <select data-type-select> manteniendo lo que estaba elegido
+    function fillTypeSelects() {
+        document.querySelectorAll('select[data-type-select]').forEach(sel => {
+            const actual = sel.value || (sel.hasAttribute('data-con-todos') ? 'all' : 'comercial');
+            sel.innerHTML = (sel.hasAttribute('data-con-todos') ? '<option value="all">Todos</option>' : '')
+                + typeOptionsHtml(actual);
+            if (sel.hasAttribute('data-con-todos') && actual === 'all') sel.value = 'all';
+            if (![...sel.options].some(o => o.value === sel.value)) sel.selectedIndex = 0;
+        });
+    }
     // ─── Company ────────────────────────────────────────────────────────
     const COMPANY_NAMES = { zero: 'Zero International', lime: 'Limesquare' };
     let activeCompany = localStorage.getItem('activeCompany') || 'zero';
@@ -837,16 +858,8 @@
             <span class="inline-flex items-center gap-2 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full pl-3 pr-2 py-1 text-sm font-mono">
                 ${escHtml(po)}
                 <select onchange="setPOType('${escAttr(po)}', this.value)" title="Tipo que se asigna a los ítems importados con este PO"
-                        class="field text-xs px-1.5 py-0.5 cursor-pointer" style="font-family:inherit;">
-                    <option value="comercial" ${t==='comercial'?'selected':''}>🏢 Comercial</option>
-                    <option value="personal" ${t==='personal'?'selected':''}>👤 Personal</option>
-                    <option value="especial" ${t==='especial'?'selected':''}>⭐ Especial</option>
-                    <option value="almacen" ${t==='almacen'?'selected':''}>🏬 Almacén</option>
-                    <option value="revisar" ${t==='revisar'?'selected':''}>🔎 Revisar</option>
-                    <option value="ale_a" ${t==='ale_a'?'selected':''}>🏷️ Ale A</option>
-                    <option value="ale_esp" ${t==='ale_esp'?'selected':''}>🏷️ Ale Esp</option>
-                    <option value="brian_a" ${t==='brian_a'?'selected':''}>🏷️ Brian A</option>
-                    <option value="brian_esp" ${t==='brian_esp'?'selected':''}>🏷️ Brian Esp</option>
+                        class="field pill-select text-xs py-0.5 cursor-pointer" style="font-family:inherit;">
+                    ${typeOptionsHtml(t)}
                 </select>
                 <button onclick="removePO('${escAttr(po)}')" class="text-blue-400/60 hover:text-red-400 transition-colors">&times;</button>
             </span>`;
@@ -862,8 +875,7 @@
         types[po] = type;
         localStorage.setItem('poTypes', JSON.stringify(types));
         saveAcceptedPOs(getAcceptedPOs());
-        const labels = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar', ale_a:'🏷️ Ale A', ale_esp:'🏷️ Ale Esp', brian_a:'🏷️ Brian A', brian_esp:'🏷️ Brian Esp'};
-        toast(`PO ${po} → ${labels[type] || type}`, 'success');
+        toast(`PO ${po} → ${typeDisplay(type)}`, 'success');
     }
     function addPO() {
         const input = document.getElementById('new-po');
@@ -883,6 +895,80 @@
         saveAcceptedPOs(pos);
         renderPOs();
         toast(`PO "${po}" eliminado`, 'success');
+    }
+
+    // ─── Administrar tipos de ítem ──────────────────────────────────────
+    async function loadItemTypes() {
+        try {
+            const d = await (await fetch('/api/config/item-types')).json();
+            if (Array.isArray(d.types)) { ITEM_TYPES_CFG = d.types; renderItemTypesList(); }
+        } catch (e) {}
+    }
+    function renderItemTypesList() {
+        const list = document.getElementById('types-list');
+        if (!list) return;
+        list.innerHTML = ITEM_TYPES_CFG.map(t => `
+            <span class="inline-flex items-center gap-1.5 rounded-full pl-3 pr-2 py-1 text-sm border
+                         ${t.mezclable ? 'bg-purple-500/15 text-purple-200 border-purple-500/30' : 'bg-blue-500/15 text-blue-200 border-blue-500/30'}"
+                  title="${t.usos != null ? t.usos + ' ítem(s) con este tipo' : ''}">
+                ${escHtml(t.emoji)} ${escHtml(t.label)}
+                ${t.mezclable ? '<span class="text-[10px] uppercase tracking-wide text-purple-300/80">mezclable</span>' : ''}
+                ${t.sistema
+                    ? '<span class="text-[10px] text-gray-500 px-1" title="Tipo del sistema, no se puede borrar">🔒</span>'
+                    : `<button onclick="deleteItemType('${escAttr(t.key)}')" class="text-gray-400/60 hover:text-red-400 transition-colors px-1">&times;</button>`}
+            </span>`).join('');
+    }
+    // Después de cualquier cambio: refrescar todos los desplegables y las listas
+    function aplicarTiposNuevos(tipos) {
+        ITEM_TYPES_CFG = tipos;
+        fillTypeSelects();
+        renderItemTypesList();
+        renderPOs();
+        if (typeof renderItems === 'function' && allItems.length) renderItems();
+    }
+    async function addItemType() {
+        const label = document.getElementById('new-type-label').value.trim();
+        const emoji = document.getElementById('new-type-emoji').value.trim();
+        const mezclable = document.getElementById('new-type-mezclable').checked;
+        if (!label) { toast('Poné un nombre para el tipo', 'warning'); return; }
+        const res = await fetch('/api/config/item-types', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label, emoji, mezclable })
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(d.error || 'No se pudo agregar', 'error'); return; }
+        document.getElementById('new-type-label').value = '';
+        document.getElementById('new-type-emoji').value = '';
+        document.getElementById('new-type-mezclable').checked = false;
+        await loadItemTypes();
+        aplicarTiposNuevos(ITEM_TYPES_CFG);
+        toast(`Tipo "${label}" agregado`, 'success');
+    }
+    async function deleteItemType(key) {
+        const t = tipoCfg(key);
+        if (!t) return;
+        const usos = t.usos || 0;
+        const ok = await confirmDialog({
+            icon: '🏷️',
+            title: `Borrar "${t.label}"`,
+            message: usos
+                ? `Hay ${usos} ítem(s) con este tipo. Si lo borrás, pasan a 🏢 Comercial.\n\nLos PO que lo usaban también vuelven a Comercial.`
+                : 'Ningún ítem usa este tipo. Los PO que lo tuvieran asignado vuelven a Comercial.',
+            confirmText: 'Borrar',
+            confirmClass: 'btn-danger'
+        });
+        if (!ok) return;
+        const res = await fetch(`/api/config/item-types/${encodeURIComponent(key)}`, { method: 'DELETE' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(d.error || 'No se pudo borrar', 'error'); return; }
+        // los PO guardados en el navegador también pierden ese tipo
+        const pt = getPOTypes();
+        Object.keys(pt).forEach(po => { if (pt[po] === key) delete pt[po]; });
+        localStorage.setItem('poTypes', JSON.stringify(pt));
+        await loadItemTypes();
+        aplicarTiposNuevos(ITEM_TYPES_CFG);
+        if (d.items_movidos) loadItems();
+        toast(`Tipo "${t.label}" borrado` + (d.items_movidos ? ` · ${d.items_movidos} ítem(s) pasaron a Comercial` : ''), 'success');
     }
 
     // ─── Cuenta de Amazon habilitada (por empresa) ──────────────────────
@@ -1579,7 +1665,7 @@
         if (name === 'upload') loadLastUpload();
         if (name === 'items') loadItems();
         if (name === 'history') loadHistory();
-        if (name === 'config') { renderPOs(); loadAccountEmails(); loadTrackingCfg(); loadWarehouseCfg(); loadGeminiCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
+        if (name === 'config') { renderPOs(); loadItemTypes(); loadAccountEmails(); loadTrackingCfg(); loadWarehouseCfg(); loadGeminiCfg(); loadInvoiceCounter(); loadEmailConfig(); loadResendCfg(); }
         localStorage.setItem('lastTab', name);
     }
 
@@ -1853,15 +1939,7 @@
                             </select>
                             <select onclick="event.stopPropagation()" onchange="changeItemType(${item.id}, this.value)"
                                     class="field text-xs px-2 py-1 cursor-pointer" title="Tipo de ítem">
-                                <option value="comercial" ${(item.item_type || 'comercial') === 'comercial' ? 'selected' : ''}>🏢 Comercial</option>
-                                <option value="personal" ${item.item_type === 'personal' ? 'selected' : ''}>👤 Personal</option>
-                                <option value="especial" ${item.item_type === 'especial' ? 'selected' : ''}>⭐ Especial</option>
-                                <option value="almacen" ${item.item_type === 'almacen' ? 'selected' : ''}>🏬 Almacén</option>
-                                <option value="revisar" ${item.item_type === 'revisar' ? 'selected' : ''}>🔎 Revisar</option>
-                                <option value="ale_a" ${item.item_type === 'ale_a' ? 'selected' : ''}>🏷️ Ale A</option>
-                                <option value="ale_esp" ${item.item_type === 'ale_esp' ? 'selected' : ''}>🏷️ Ale Esp</option>
-                                <option value="brian_a" ${item.item_type === 'brian_a' ? 'selected' : ''}>🏷️ Brian A</option>
-                                <option value="brian_esp" ${item.item_type === 'brian_esp' ? 'selected' : ''}>🏷️ Brian Esp</option>
+                                ${typeOptionsHtml((item.item_type || 'comercial'))}
                             </select>
                             ${item.multi_item ? '<span class="badge bg-purple-500/20 text-purple-300">Multi</span>' : ''}
                             <button onclick="event.stopPropagation(); copyItemField(${item.id}, 'title', this)" class="text-gray-400 hover:text-blue-300 rounded p-1.5 hover:bg-white/5 transition-colors" title="Copiar título">
@@ -2006,7 +2084,7 @@
                 message: `Este envío es ${typeLabel(targetType)}.\n\n${skippedType} ítem(s) del otro tipo no se agregaron. No se pueden mezclar tipos distintos en el mismo envío.${added ? `\n\nSe agregaron ${added} ítem(s) ${typeLabel(targetType)}.` : ''}`,
                 confirmText: 'Entendido',
                 cancelText: '',
-                icon: targetType === 'personal' ? '👤' : '🏢'
+                icon: typeIcon(targetType)
             });
         } else if (added > 0) {
             toast(skipped > 0
@@ -2250,10 +2328,9 @@
         });
     }
 
-    // Las etiquetas (Ale A, Ale Esp, Brian A, Brian Esp) se pueden mezclar entre sí en un
+    // Los tipos marcados como "mezclables" en Configuración se pueden mezclar entre sí en un
     // mismo envío; el resto de los tipos sigue sin poder mezclarse con nada distinto.
-    const ETIQUETAS = ['ale_a', 'ale_esp', 'brian_a', 'brian_esp'];
-    function typeGroup(t) { return ETIQUETAS.includes(t) ? 'etiqueta' : (t || 'comercial'); }
+    function typeGroup(t) { return (tipoCfg(t) || {}).mezclable ? '__mezclables__' : (t || 'comercial'); }
     function sameGroup(a, b) { return typeGroup(a) === typeGroup(b); }
     // Tipo del envío en curso (el de sus ítems). null si la caja está vacía.
     function boxType() {
@@ -2261,11 +2338,10 @@
         return null;
     }
     function typeIcon(t) {
-        return {comercial:'🏢', personal:'👤', especial:'⭐', almacen:'🏬', revisar:'🔎', ale_a:'🏷️', ale_esp:'🏷️', brian_a:'🏷️', brian_esp:'🏷️'}[t] || '🏢';
+        return (tipoCfg(t) || {}).emoji || '🏢';
     }
     function typeLabel(t) {
-        return {comercial:'COMERCIAL', personal:'PERSONAL', especial:'ESPECIAL',
-                almacen:'ALMACÉN', revisar:'REVISAR', ale_a:'ALE A', ale_esp:'ALE ESP', brian_a:'BRIAN A', brian_esp:'BRIAN ESP'}[t] || 'COMERCIAL';
+        return ((tipoCfg(t) || {}).label || 'Comercial').toUpperCase();
     }
 
     function addToBox(itemId) {
@@ -2878,7 +2954,7 @@
             if (res.ok) {
                 const it = allItems.find(i => i.id === itemId);
                 if (it) it.item_type = newType;
-                const _tl = {comercial:'🏢 Comercial', personal:'👤 Personal', especial:'⭐ Especial', almacen:'🏬 Almacén', revisar:'🔎 Revisar', ale_a:'🏷️ Ale A', ale_esp:'🏷️ Ale Esp', brian_a:'🏷️ Brian A', brian_esp:'🏷️ Brian Esp'}[newType] || newType;
+                const _tl = typeDisplay(newType);
                 toast('Tipo: ' + _tl, 'success');
                 renderItems();   // el botón del Almacén depende del tipo
             } else {
@@ -3155,6 +3231,7 @@
 
     // ─── Init ───────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
+        fillTypeSelects();
         applyCompanyUI();
         try {
             const res = await fetch('/api/config/po');
